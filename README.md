@@ -165,7 +165,7 @@ r = flow_run_async(flow="淘宝发品", vars={"title": "商品A"})
 # 查进度
 flow_task(task_id="t-xxx")     # queued / running / done / failed / cancelled
 flow_tasks()                   # 队列概览：并发度 + 各状态计数 + 最近任务
-flow_cancel(task_id="t-xxx")   # 只能取消还在排队的
+flow_cancel(task_id="t-xxx")   # 排队中 / 执行中都能取消
 ```
 
 HTTP 等价：
@@ -175,6 +175,8 @@ POST /run-async/{name}   入队，返回 task_id
 GET  /task/{task_id}     查状态（含 run_id、失败节点）
 GET  /tasks              队列概览
 ```
+
+取消行为：排队中直接标记取消；执行中调用 `task.cancel()`，流程在最近的 `await` 点停下（实测 0.3 秒内生效）。页面可能停在操作中途——和节点报错留下的状态一样，用 `read_failure` 看现场。
 
 n8n 用法：触发 → 拿 task_id → 轮询 `/task/{id}` → 或直接不管（队列会跑完，记录留在 SQLite）。
 

@@ -67,6 +67,8 @@ class TaskQueue:
         self._order: list[str] = []
         self._runner: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]] | None = None
         self._running = 0
+        # 活跃的 asyncio.Task 句柄：执行中要取消就靠它
+        self._live: dict[str, asyncio.Task] = {}
 
     def bind(self, runner: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]) -> None:
         """绑定真正的执行函数（避免 engine 反向 import api）。"""
@@ -83,7 +85,7 @@ class TaskQueue:
         self._records[tid] = rec
         self._order.append(tid)
         self._trim()
-        asyncio.create_task(self._run(rec))
+        self._live[tid] = asyncio.create_task(self._run(rec))
         return {
             "ok": True,
             "task_id": tid,
@@ -93,26 +95,42 @@ class TaskQueue:
         }
 
     async def _run(self, rec: TaskRecord) -> None:
-        async with self._sem:
-            if rec.status == "cancelled":
-                return
-            rec.status = "running"
-            rec.started = time.time()
-            rec.position = 0
-            self._running += 1
-            try:
-                assert self._runner is not None
-                rec.result = await self._runner(rec.flow, rec.vars)
-                rec.status = "done" if rec.result.get("ok") else "failed"
-                if not rec.result.get("ok"):
-                    rec.error = str(rec.result.get("error") or "流程执行失败")
-            except Exception as exc:  # noqa: BLE001
-                rec.status = "failed"
-                rec.error = f"{type(exc).__name__}: {exc}"
-            finally:
-                rec.finished = time.time()
-                self._running -= 1
-                self._reindex()
+        try:
+            async with self._sem:
+                if rec.status in ("cancelled", "cancelling"):
+                    rec.status = "cancelled"
+                    return
+                rec.status = "running"
+                rec.started = time.time()
+                rec.position = 0
+                self._running += 1
+                try:
+                    assert self._runner is not None
+                    rec.result = await self._runner(rec.flow, rec.vars)
+                    rec.status = "done" if rec.result.get("ok") else "failed"
+                    if not rec.result.get("ok"):
+                        rec.error = str(rec.result.get("error") or "流程执行失败")
+                except asyncio.CancelledError:
+                    # 用户在执行中取消：这里接住，标记 cancelled 后继续往外抛
+                    rec.status = "cancelled"
+                    rec.error = "执行中被取消"
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    rec.status = "failed"
+                    rec.error = f"{type(exc).__name__}: {exc}"
+                finally:
+                    rec.finished = rec.finished or time.time()
+                    self._running = max(0, self._running - 1)
+        except asyncio.CancelledError:
+            # 排队中被取消（还在等 semaphore）：同上
+            if rec.status not in ("done", "failed"):
+                rec.status = "cancelled"
+                rec.error = rec.error or "排队中被取消"
+            rec.finished = rec.finished or time.time()
+            raise
+        finally:
+            self._live.pop(rec.id, None)
+            self._reindex()
 
     # ---------------------------------------------------------- 查询
 
@@ -145,16 +163,33 @@ class TaskQueue:
         rec = self._records.get(task_id)
         if rec is None:
             return {"ok": False, "error": f"没有这个 task_id: {task_id}"}
+
         if rec.status == "queued":
             rec.status = "cancelled"
             rec.finished = time.time()
             rec.error = "排队中被取消"
+            t = self._live.get(task_id)
+            if t is not None and not t.done():
+                t.cancel()
             self._reindex()
-            return {"ok": True, "message": f"{task_id} 已取消（还没开始跑）"}
+            return {"ok": True, "status": "cancelled", "message": f"{task_id} 已取消（还没开始跑）"}
+
+        if rec.status == "running":
+            t = self._live.get(task_id)
+            if t is None or t.done():
+                return {"ok": False, "error": "任务在运行但没有活跃句柄（内部状态异常）"}
+            t.cancel()  # asyncio 会在下一个 await 点抛 CancelledError
+            rec.status = "cancelling"
+            return {
+                "ok": True,
+                "status": "cancelling",
+                "message": f"{task_id} 已请求中断，当前节点会在最近的 await 点停下",
+                "hint": "页面可能停在操作中途（表单填一半等），这和节点报错留下的状态一样",
+            }
+
         return {
             "ok": False,
-            "error": f"任务已是 {rec.status}，无法取消",
-            "hint": "已经开始执行的流程不能从队列里取消；要给节点加 timeout 请用 budget_ms",
+            "error": f"任务已是 {rec.status}，不需要取消",
         }
 
     # ---------------------------------------------------------- 内部
