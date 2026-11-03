@@ -479,7 +479,7 @@ async def _score_candidates(loc: Any, n: int, entry: dict[str, Any]) -> list[dic
 
             text = ((await el.inner_text()) or "").strip()[:60]
             try:
-                vis = await el.web_visible()
+                vis = await el.is_visible()
             except Exception:  # noqa: BLE001
                 vis = True
             if vis:

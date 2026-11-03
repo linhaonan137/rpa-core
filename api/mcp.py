@@ -305,9 +305,27 @@ async def web_fill(
     elif kind == "upload":
         r = await _call("web_upload", {"target": target, "path": value, "limit_ms": limit_ms})
     else:
-        r = await _call("web_type", {"target": target, "value": value, "clear": clear, "verify": verify, "limit_ms": limit_ms})
-    if r.get("ok") and verify and kind == "text":
-        r["verified"] = True
+        r = await _call(
+            "web_type",
+            {"target": target, "value": value, "clear": clear, "limit_ms": limit_ms},
+        )
+        # verify 必须**真读回比对**：原来把 verify 传给节点（节点不读），
+        # 然后无条件 verified=True，填不进去也报"已校验"，Agent 会带着错数据往下跑
+        if r.get("ok") and verify:
+            actual = await _call(
+                "web_read", {"target": target, "kind": "value", "limit_ms": 3000}
+            )
+            got = str(actual.get("data") or "")
+            want = str(value or "")
+            if actual.get("ok") and want and want not in got:
+                return {
+                    "ok": False,
+                    "error": f"填写后校验失败：期望包含 {want[:30]!r}，实际读回 {got[:30]!r}",
+                    "actual": got,
+                    "hint": "常见原因：readonly / 受控组件回滚 / 被遮罩层挡住",
+                }
+            r["verified"] = True
+            r["actual"] = got
     return r
 
 
@@ -596,8 +614,16 @@ async def record_start(variables: dict | None = None) -> dict[str, Any]:
         if host:
             args["url"] = host
         if cdp:
+            # 有 CDP：回放时接管同一个已登录浏览器
             args["cdp"] = cdp
-        ctx_node = {"type": "web_attach", "args": args}
+            ctx_node = {"type": "web_attach", "args": args}
+        else:
+            # 没有 CDP（浏览器是引擎 launch 的）：回放时新 ctx 里没有任何页面，
+            # 用 web_attach 会报"没有已打开的页面可接管"，必须用 web_open 自己开
+            ctx_node = {
+                "type": "web_open",
+                "args": {"url": u or "about:blank", "kind": "new", "until": "dom"},
+            }
     return recorder.start(variables, ctx_node)
 
 

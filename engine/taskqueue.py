@@ -168,7 +168,7 @@ class TaskQueue:
             rec.status = "cancelled"
             rec.finished = time.time()
             rec.error = "排队中被取消"
-            t = self._live.get(task_id)
+            t = self._live.pop(task_id, None)
             if t is not None and not t.done():
                 t.cancel()
             self._reindex()

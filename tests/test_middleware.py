@@ -73,7 +73,7 @@ class FakeLocator:
             raise RuntimeError("Target page, context or browser has been closed")
         return self._count
 
-    async def web_visible(self) -> bool:
+    async def is_visible(self) -> bool:
         if self.closed:
             raise RuntimeError("Target page, context or browser has been closed")
         return self._visible
@@ -204,7 +204,7 @@ class FakePage:
     async def content(self) -> str:
         return self._html
 
-    async def web_shot(self, path: str = "", full_page: bool = False) -> bytes:
+    async def screenshot(self, path: str = "", full_page: bool = False) -> bytes:
         if self._screenshot_error:
             raise RuntimeError("截图失败：页面已崩溃")
         return b"png"

@@ -127,7 +127,7 @@ async def _is_visible(locator: Any) -> bool:
     if locator is None:
         return False
     try:
-        return bool(await _first(locator).web_visible())
+        return bool(await _first(locator).is_visible())
     except Exception:  # noqa: BLE001
         return False
 
@@ -775,7 +775,7 @@ async def snapshot(
     if target_page is not None:
         shot = base / "web_shot.png"
         try:
-            await target_page.web_shot(path=str(shot), full_page=True)
+            await target_page.screenshot(path=str(shot), full_page=True)
             info["web_shot"] = str(shot)
         except Exception as exc:  # noqa: BLE001
             info["warnings"].append(f"截图失败: {exc}")

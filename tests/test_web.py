@@ -46,11 +46,11 @@ class FakeLocator:
         self.wait_for = AsyncMock()
         self.scroll_into_view_if_needed = AsyncMock()
         self.drag_to = AsyncMock()
-        self.web_shot = AsyncMock()
+        self.screenshot = AsyncMock()
         self.inner_text = AsyncMock(return_value=text)
         self.inner_html = AsyncMock(return_value=f"<b>{text}</b>")
         self.input_value = AsyncMock(return_value=value)
-        self.web_visible = AsyncMock(return_value=visible)
+        self.is_visible = AsyncMock(return_value=visible)
         self.get_attribute = AsyncMock(side_effect=lambda n: (attrs or {}).get(n))
         self.evaluate = AsyncMock(return_value=None)
         self.evaluate_all = AsyncMock(return_value=items if items is not None else [])
@@ -113,15 +113,15 @@ class FakePage:
         self.url = url
         self.loc = loc or FakeLocator()
         self.goto = AsyncMock()
-        self.web_back = AsyncMock(return_value=None)
-        self.web_forward = AsyncMock(return_value=None)
+        self.go_back = AsyncMock(return_value=None)
+        self.go_forward = AsyncMock(return_value=None)
         self.reload = AsyncMock()
         self.close = AsyncMock()
         self.title = AsyncMock(return_value=title)
         self.content = AsyncMock(return_value=content)
         self.evaluate = AsyncMock(return_value=ready_state)
         self.wait_for_load_state = AsyncMock()
-        self.web_shot = AsyncMock()
+        self.screenshot = AsyncMock()
         self.add_script_tag = AsyncMock()
         self.once = MagicMock()
         self.mouse = FakeMouse()
@@ -280,8 +280,8 @@ async def test_go_back_and_forward_and_refresh():
     assert (await web.web_forward({}, ctx)).ok is True
     assert (await web.web_reload({}, ctx)).ok is True
 
-    page.web_back.assert_awaited_once()
-    page.web_forward.assert_awaited_once()
+    page.go_back.assert_awaited_once()
+    page.go_forward.assert_awaited_once()
     page.reload.assert_awaited_once()
     assert page.reload.await_args.kwargs["wait_until"] == "load"
 
@@ -684,12 +684,12 @@ async def test_screenshot_page_and_full(tmp_path):
 
     r = await web.web_shot({"path": str(out), "save_as": "img"}, ctx)
     assert r.ok is True
-    page.web_shot.assert_awaited_once_with(path=str(out), full_page=False)
+    page.screenshot.assert_awaited_once_with(path=str(out), full_page=False)
     assert ctx.get_var("img") == str(out)
 
     r2 = await web.web_shot({"kind": "full", "path": str(tmp_path / "b.png")}, ctx)
     assert r2.ok is True
-    assert page.web_shot.await_args.kwargs["full_page"] is True
+    assert page.screenshot.await_args.kwargs["full_page"] is True
 
 
 async def test_screenshot_element(tmp_path):
@@ -700,7 +700,7 @@ async def test_screenshot_element(tmp_path):
     r = await web.web_shot({"kind": "element", "target": "#chart", "path": str(out)}, make_ctx(page))
 
     assert r.ok is True
-    loc.web_shot.assert_awaited_once_with(path=str(out))
+    loc.screenshot.assert_awaited_once_with(path=str(out))
 
 
 async def test_download_file_by_url(tmp_path):

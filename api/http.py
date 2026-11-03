@@ -22,7 +22,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from engine.context import ContextError, ExecutionContext
-from engine.paths import DB_PATH, FLOWS_DIR
+from engine.paths import DB_PATH, ELEMENTS_PATH, FLOWS_DIR
 from engine.registry import registry
 from engine.runner import RunOptions, Runner
 from engine.schema import Flow
@@ -183,6 +183,55 @@ def create_app(
         from engine.taskqueue import task_queue
 
         return task_queue.list_recent(limit=limit)
+
+    @app.get("/flow/{name}")
+    async def flow_detail(name: str, request: Request) -> dict[str, Any]:
+        """读单个流程的完整定义（UI 用：显示节点、变量、上次结果）。"""
+        _check(request)
+        flow = _load(name)
+        last = None
+        try:
+            from store.db import DB
+
+            db = DB(db_file)
+            last = db.last_run(flow.name) if hasattr(db, "last_run") else None
+            db.close()
+        except Exception:  # noqa: BLE001
+            last = None
+        return {
+            "ok": True,
+            "name": flow.name,
+            "version": flow.version,
+            "nodes": [
+                {"id": n.id, "type": n.type, "label": n.label or n.type, "off": n.off}
+                for n in flow.nodes
+            ],
+            "vars": [{"name": v.name, "value": v.value} for v in flow.vars],
+            "node_count": len(flow.nodes),
+            "last_run": last,
+        }
+
+    @app.get("/elements")
+    async def list_elements(request: Request) -> dict[str, Any]:
+        """元素库清单（UI 用：看拾取了哪些元素、有没有失效）。"""
+        _check(request)
+        try:
+            from elements.store import ElementStore
+
+            store = ElementStore(str(ELEMENTS_PATH))
+            items = []
+            for k in store.keys():
+                e = store.get(k)
+                items.append({
+                    "key": k,
+                    "role": e.role,
+                    "name": e.name,
+                    "hits": int((e.hints or {}).get("hits", 0) or 0),
+                    "stale": bool((e.meta or {}).get("stale")),
+                })
+            return {"ok": True, "count": len(items), "elements": items}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
     @app.get("/runs")
     async def recent_runs(request: Request, limit: int = 20) -> dict[str, Any]:

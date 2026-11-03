@@ -111,15 +111,25 @@ class Recorder:
             return [self.resolve(v) for v in value]
         return value
 
-    @staticmethod
-    def to_engine_template(value: Any) -> Any:
-        """`{{变量}}` → 引擎的 `{变量}`（生成流程时才转）。"""
+    def to_engine_template(self, value: Any) -> Any:
+        """`{{变量}}` → 引擎的 `{变量}`（生成流程时才转）。
+
+        **只转 vars 里声明过的名字**。用户填的内容里本来就可能有双花括号
+        （Vue/Handlebars 模板、话术里的 `{{客户姓名}}`），那些必须原样保留，
+        否则回放时会被当成未定义变量而报错。
+        """
+        declared = set(self.vars) if self.vars else set()
+
+        def _sub(m: re.Match[str]) -> str:
+            k = m.group(1)
+            return "{" + k + "}" if k in declared else m.group(0)
+
         if isinstance(value, str):
-            return _PLACEHOLDER.sub(lambda m: "{" + m.group(1) + "}", value)
+            return _PLACEHOLDER.sub(_sub, value)
         if isinstance(value, dict):
-            return {k: Recorder.to_engine_template(v) for k, v in value.items()}
+            return {k: self.to_engine_template(v) for k, v in value.items()}
         if isinstance(value, list):
-            return [Recorder.to_engine_template(v) for v in value]
+            return [self.to_engine_template(v) for v in value]
         return value
 
     # ---------------------------------------------------------- 记录

@@ -804,7 +804,7 @@ async def web_back(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     """args: {wait_until=load, limit_ms}"""
     page = _page(ctx)
     limit = _ms(ctx, args, "limit_ms", DEFAULT_LIMIT_MS)
-    await page.web_back(wait_until=args.get("wait_until", "load"), timeout=limit)
+    await page.go_back(wait_until=args.get("wait_until", "load"), timeout=limit)
     return Result.done("已后退")
 
 
@@ -814,7 +814,7 @@ async def web_forward(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     """args: {wait_until=load, limit_ms}"""
     page = _page(ctx)
     limit = _ms(ctx, args, "limit_ms", DEFAULT_LIMIT_MS)
-    await page.web_forward(wait_until=args.get("wait_until", "load"), timeout=limit)
+    await page.go_forward(wait_until=args.get("wait_until", "load"), timeout=limit)
     return Result.done("已前进")
 
 
@@ -1873,7 +1873,7 @@ async def web_visible(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         _save(ctx, args, False)
         return Result.done(f"{target} 不存在 → 不可见", data=False)
 
-    visible = bool(await getattr(loc, "first", loc).web_visible())
+    visible = bool(await getattr(loc, "first", loc).is_visible())
     _save(ctx, args, visible)
     return Result.done(f"{target} 可见={visible}", data=visible)
 
@@ -1914,9 +1914,9 @@ async def web_shot(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         limit = _ms(ctx, args, "limit_ms", DEFAULT_LIMIT_MS)
         loc = await _locate(page, target, args.get("hints"), ctx, limit)
         el = await _pick(loc, target, limit)
-        await el.web_shot(path=path)
+        await el.screenshot(path=path)
     else:
-        await page.web_shot(path=path, full_page=(kind == "full"))
+        await page.screenshot(path=path, full_page=(kind == "full"))
 
     _save(ctx, args, path)
     return Result.done(f"已截图 → {path}", data=path)
@@ -2000,7 +2000,7 @@ async def web_save_img(args: dict[str, Any], ctx: ExecutionContext) -> Result:
             _save(ctx, args, path)
             return Result.done(f"已保存图片 → {path}", data=path)
 
-    await el.web_shot(path=path)
+    await el.screenshot(path=path)
     _save(ctx, args, path)
     return Result.done(f"已保存图片（元素截图） → {path}", data=path)
 
@@ -2110,11 +2110,11 @@ async def web_assert(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         if state in ("exist", "visible"):
             ok = bool(count)
             if ok and state == "visible":
-                ok = bool(await getattr(loc, "first", loc).web_visible())
+                ok = bool(await getattr(loc, "first", loc).is_visible())
         elif state in ("absent", "hidden", "detached"):
             ok = not count
             if state == "hidden" and count:
-                ok = not bool(await getattr(loc, "first", loc).web_visible())
+                ok = not bool(await getattr(loc, "first", loc).is_visible())
         else:
             return Result.fail(f"web_assert 不支持的 state: {state}")
         detail = f"{target} 应 {state}（命中 {count}）"

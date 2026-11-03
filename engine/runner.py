@@ -392,7 +392,7 @@ class Runner:
                     n = await loc.count()
                     if n == 0:
                         last = f"元素不存在: {exp.target}"
-                    elif exp.state == "visible" and not await loc.first.web_visible():
+                    elif exp.state == "visible" and not await loc.first.is_visible():
                         last = f"元素不可见: {exp.target}"
                 else:
                     return True, ""
