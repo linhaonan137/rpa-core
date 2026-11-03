@@ -676,7 +676,7 @@ async def web_attach(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         frames.clear()
 
     # url 只用于**匹配**已有页面，绝不能顺手当导航目标 ——
-    # 原来写成 `if url: goto(url)`，而到处都传 "myseller.taobao.com" 这种
+    # 原来写成 `if url: goto(url)`，而到处都传 "example.com" 这种
     # 不带协议的标识串，结果 attach 完就炸在 Page.navigate: invalid URL。
     if _flag(args, "navigate", False):
         if not url.startswith(("http://", "https://")):
@@ -1375,7 +1375,7 @@ JS_SCAN_INTERACTIVE = r"""
   // 传统可交互标签
   const NATIVE = "a,button,input,select,textarea,summary,label,"
     + "[role],[onclick],[tabindex],[contenteditable=true]";
-  // 淘宝这类后台把按钮做成 <p class="text">男装</p> / <div class="info-content">23区</div>
+    // 有些后台把按钮做成 <p class="text">类目名</p> / <div class="info-content">选项名</div>
   // —— 没有 a/button，没有 role，onclick 也是 React 事件委托（DOM 上没有属性）。
   // 唯一通用判据是 cursor:pointer。
   const TEXTUAL = "p,span,div,li,td,dd,dt,h1,h2,h3,h4,h5,h6";
