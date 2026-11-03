@@ -967,7 +967,24 @@ async def data_csv_write(args: dict[str, Any], ctx: ExecutionContext) -> Result:
             writer.writerow([_to_text(c) for c in r])
 
     text = buf.getvalue()
-    return _ok(ctx, args, f"生成 {len(rows)} 行 CSV（{len(text)} 字符）", text)
+
+    # 给了 path 就直接落盘（原来只返回字符串，传了 path 会被静默忽略，
+    # 调用方以为"生成成功"其实文件根本没写出来）
+    path = str(args.get("path") or "").strip()
+    if path:
+        from engine.paths import resolve_path
+
+        target = resolve_path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding=str(args.get("encoding") or "utf-8-sig"))
+        return _ok(
+            ctx,
+            args,
+            f"写入 {len(rows)} 行 CSV → {path}（{len(text)} 字符）",
+            {"path": str(target), "rows": len(rows), "chars": len(text)},
+        )
+
+    return _ok(ctx, args, f"生成 {len(rows)} 行 CSV（{len(text)} 字符，未落盘：没给 path）", text)
 
 
 # ---------------------------------------------------------------- 统计
