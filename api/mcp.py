@@ -431,17 +431,15 @@ async def web_check(
     target: str = "",
     action: str = "",
 ) -> dict[str, Any]:
-    """判断元素/页面状态（**不是等待**，是"现在是什么状态"）。
+    """
+判断元素/页面状态（**不是等待**，是"现在是什么状态"）。
 
-    - `kind="exists"`：元素在 DOM 里吗
-    - `kind="visible"`：元素可见吗
-    - `kind="page_ready"`：页面加载完成了吗
+- `kind="exists"`：元素在 DOM 里吗
+- `kind="visible"`：元素可见吗
+- `kind="page_ready"`：页面加载完成了吗
 
-    要"等它出现"请用 `web_wait`；要"判断现在有没有"用这个。
-
-    ✅ 用：**现在这一刻**，元素在不在（exists）/ 可见不可见（visible）/ 页面加载完没
-❌ 别用：要等它出现→web_wait；验证 @el: 元素库条目→web_verify；
-        体检整个元素库→element_check
+✅ 用：要立即知道当前状态（不要等）
+❌ 别用：要等它出现→web_wait；验证 @el: 元素库条目→web_verify；体检整个元素库→element_check
     """
     kind, err = _merge_action(action, kind, allowed=("exists", "visible", "page_ready"), default="exists")
     if err:
@@ -482,10 +480,10 @@ async def web_wait(
 
 @mcp.tool
 async def inspect_node(node_type: str) -> dict[str, Any]:
-    """**查节点的参数名、默认值和说明** —— 拼流程 / 写脚本前先查，别猜字段名。
+    """
+**查节点的参数名、默认值和说明** —— 写流程前先查，别猜字段名。
 
-    参数名猜错的代价很高（今天踩过：text/items、control/target、limit_ms/timeout_ms
-    全是猜错的），这个工具直接把 docstring 里的 `args: {...}` 解析成结构化列表。
+返回每个参数的名字、默认值、枚举取值。参数名传错时节点往往**静默返回空**而不报错。
     """
     import re
 
@@ -777,14 +775,12 @@ _JS_DOM_INSPECT = r"""
 
 @mcp.tool
 async def dom_inspect(target: str, depth: int = 4) -> dict[str, Any]:
-    """**看元素的真实结构**：属性 / 类名 / 样式 / 祖先链 / 兄弟元素 / 可见性。
+    """
+**看元素的真实结构**：属性 / 类名 / 样式 / 祖先链 / 兄弟元素 / 可见性。
 
-    典型用途：定位失败时看"这个元素到底长什么样"、判断为什么 is_visible 是 false、
-    找一个稳定的属性（data-* / id）用来重拾取。
+`target` 可以是 css 或 `@el:名字`。
 
-    `target` 可以是 css 或 `@el:名字`。
-
-    ✅ 用：定位失败时排查"这元素到底长什么样"、找稳定属性用来重拾取
+✅ 用：定位失败时排查"这元素到底长什么样"、找稳定属性用来重拾取
 ❌ 别用：只是取内容→web_read；只判断在不在/可见不可见→web_check
     """
     page = getattr(_ctx, "page", None)
@@ -925,9 +921,10 @@ async def call_node(name: str, args: dict | None = None) -> dict[str, Any]:
 
 @mcp.tool
 async def list_node_types(keyword: str = "") -> dict[str, Any]:
-    """列出引擎里全部节点类型（可按关键词过滤）。
+    """
+列出引擎里全部节点类型（可按关键词过滤）。
 
-    加节点后先用这个确认注册成功，再 call_node 试。
+写流程前用它确认"有没有能干这件事的节点"——比如搜 `csv` 看有哪些表格节点。
     """
     from engine.registry import registry
 
@@ -939,15 +936,15 @@ async def list_node_types(keyword: str = "") -> dict[str, Any]:
 
 @mcp.tool
 async def web_fields(max_label: int = 16, include_empty: bool = True) -> dict[str, Any]:
-    """**一次**发现页面上所有表单字段：label + 控件类型 + 当前值 + 是否必填。
+    """
+**一次**发现页面上所有表单字段：label + 控件类型 + 当前值 + 是否必填。
 
-    解决什么问题：淘宝发品页 25 个下拉框，placeholder 全是"请选择/请输入"，
-    没有 id 没有 name —— 这个工具用「上方 label」把真实字段名（袖长类型/面料/版型分类）
-    全部找出来，不用一个个猜 CSS、也不用写 JS。
+适用：页面大量输入框/下拉框没有 id 和 name、placeholder 都是"请选择"——
+光看 DOM 分不清谁是谁，这个工具靠字段的**标签文本**把它们区分开。
 
-    返回 [{label, tag, type, value, ph, required, xy, w}]。
+返回 `[{label, tag, type, value, ph, required, xy, w}]`。
 
-    ✅ 用：填表前先看有哪些字段（尤其 placeholder 全是"请选择"的页面）
+✅ 用：填表前先看有哪些字段
 ❌ 别用：要看按钮/链接→web_scan；要看页面文本→web_snapshot
     """
     return await _call(
@@ -986,14 +983,11 @@ async def web_scan(
     kind: Literal["interactive", "all"] = "interactive",
     limit: int = 100,
 ) -> dict[str, Any]:
-    """扫出页面上所有可交互元素（按钮/链接/输入框/可选中的），带 role + name + 坐标。
+    """
+扫出页面上所有可交互元素（按钮/链接/输入框/可选中的），带 role + name + 坐标。
 
-    典型用法：进了一个陌生页面，先 web_scan 看一眼有哪些可点的，再决定 element_pick 哪个。
-    比猜 CSS 选择器靠谱得多。
-
-    ✅ 用：第一次进陌生页面，想知道"能点什么"
-❌ 别用：要看表单字段→web_fields；要看区块+文本→web_snapshot；
-        已知元素只取内容→web_read；抓重复结构的列表→web_extract
+✅ 用：第一次进陌生页面，想知道"能点什么"
+❌ 别用：表单字段→web_fields；区块+文本→web_snapshot；已知元素取内容→web_read；抓列表→web_extract
     """
     return await _call("web_scan", {"kind": kind, "limit": min(int(limit or 100), 300)})
 
@@ -1006,15 +1000,15 @@ async def element_pick(
     store: str = "",
     role: str = "",
 ) -> dict[str, Any]:
-    """把一个元素拾取进元素库，之后用 `@el:key` 引用它。
+    """
+把一个元素拾取进元素库，之后用 `@el:key` 引用它。
 
-    三种给法（任选其一）：
-      - `role="link", text="支付金额"`：**按 ARIA 语义拾取，最准**（web_scan 的 role+name 可直接用）
-      - `text="提交订单"`：按可见文本（会自动兜到 placeholder/aria-label）
-      - `selector="#submit"`：任意 Playwright 写法（css / xpath= / text=）
+三种给法（任选其一）：
+- `role="link", text="支付金额"`：**按 ARIA 语义拾取，最准**（web_scan 的 role+name 可直接用）
+- `text="提交订单"`：按可见文本（会自动兜到 placeholder/aria-label）
+- `selector="#submit"`：任意 Playwright 写法（css / xpath= / text=）
 
-    拾取时抓六维指纹（role/name/attrs/path/siblings/geometry），
-    以后定位会逐层降级，不只依赖一个选择器。需要先 web_open 打开页面。
+拾取时会记录元素的多维特征，之后页面改版也能逐层降级定位，不只依赖一个 CSS 选择器。
     """
     if not key:
         return {"ok": False, "error": "element_pick 需要 key（元素在库里的名字）"}
@@ -1206,9 +1200,10 @@ async def desktop_act(
     limit: int = 1000,
     action: str = "",
 ) -> dict[str, Any]:
-    """桌面三件事：批量抓表格 / 抠控件里读不到的文字 / 读当前焦点控件。
+    """
+桌面三件事：批量抓表格 / 抠控件里读不到的文字 / 读当前焦点控件。
 
-    其余桌面操作请用 desktop-touch（另一个 MCP，32 工具）。
+只做这三件。桌面自动化大部分场景用不上，页内操作用 `web_*` 更快更稳。
     """
     kind, err = _merge_action(action, kind, allowed=('table', 'select_text', 'focused'), default='table')
     if err:
