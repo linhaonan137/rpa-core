@@ -148,6 +148,42 @@ def create_app(
             }
         )
 
+    @app.post("/run-async/{name}")
+    async def run_flow_async_route(name: str, request: Request) -> JSONResponse:
+        """异步跑：立刻返回 task_id，不等执行完（长流程 / 并发场景用这个）。"""
+        _check(request)
+        _load(name)  # 校验流程存在
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            body = {}
+        variables = body if isinstance(body, dict) else {}
+
+        from engine.taskqueue import task_queue
+
+        if not getattr(task_queue, "_runner", None):
+            from api.mcp import _queue_runner
+
+            task_queue.bind(_queue_runner)
+        out = task_queue.submit(name, variables)
+        return JSONResponse(out)
+
+    @app.get("/task/{task_id}")
+    async def task_status(task_id: str, request: Request) -> dict[str, Any]:
+        """查异步任务状态。queued / running / done / failed / cancelled。"""
+        _check(request)
+        from engine.taskqueue import task_queue
+
+        return task_queue.get(task_id, full=True)
+
+    @app.get("/tasks")
+    async def task_list(request: Request, limit: int = 20) -> dict[str, Any]:
+        """队列概览：并发度 + 各状态计数 + 最近任务。"""
+        _check(request)
+        from engine.taskqueue import task_queue
+
+        return task_queue.list_recent(limit=limit)
+
     @app.get("/runs")
     async def recent_runs(request: Request, limit: int = 20) -> dict[str, Any]:
         _check(request)

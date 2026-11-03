@@ -5,7 +5,7 @@
 ```
 CLI / EXE    rpa.exe run flows\xxx.json      <- 人 / 定时任务
 HTTP         POST /run/{name}                <- n8n / 其它系统
-MCP          39 个工具                       <- AI Agent
+MCP          43 个工具                       <- AI Agent
                     |
               引擎（DAG 调度 + 122 节点 + 元素库）
                     |
@@ -36,7 +36,7 @@ pip install -r requirements.txt
 playwright install chrome
 
 python main.py run flows/demo.json      # 跑流程
-python main.py serve --port 8100        # HTTP 服务
+python main.py serve --port 8100        # HTTP 服务（含异步队列）
 python main.py mcp                      # MCP 服务
 pytest tests -q                         # 579 项测试
 ```
@@ -148,10 +148,35 @@ engine/          引擎（约 3,300 行）
 
 nodes/          122 个节点（12 个域）
 elements/       元素库（六维指纹 + 降级定位）
-api/            mcp.py（39 工具）/ http.py（6 路由）
+api/            mcp.py（43 工具）/ http.py（8 路由）
 store/          SQLite（执行记录 + 耗时趋势）
 tests/          579 项
 ```
+
+## 异步执行 + 队列
+
+长流程不必阻塞调用方。**浏览器是独占资源**，所以队列默认并发度 1，任务串行跑。
+
+```python
+# 提交（立刻返回）
+r = flow_run_async(flow="淘宝发品", vars={"title": "商品A"})
+# -> {"task_id": "t-xxx", "status": "queued", "queue_position": 2}
+
+# 查进度
+flow_task(task_id="t-xxx")     # queued / running / done / failed / cancelled
+flow_tasks()                   # 队列概览：并发度 + 各状态计数 + 最近任务
+flow_cancel(task_id="t-xxx")   # 只能取消还在排队的
+```
+
+HTTP 等价：
+
+```
+POST /run-async/{name}   入队，返回 task_id
+GET  /task/{task_id}     查状态（含 run_id、失败节点）
+GET  /tasks              队列概览
+```
+
+n8n 用法：触发 → 拿 task_id → 轮询 `/task/{id}` → 或直接不管（队列会跑完，记录留在 SQLite）。
 
 ## 失败现场
 
@@ -177,7 +202,7 @@ read_failure(level="dom")    # 带当时的 DOM 清单
 ## 规模
 
 ```
-122 节点 · 39 MCP 工具 · 579 测试 · 24,922 行
+122 节点 · 43 MCP 工具 · 579 测试
 引擎 3,300 行 / 测试 6,223 行
 ```
 

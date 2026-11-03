@@ -1449,6 +1449,75 @@ async def _save_failure(run_id: str, flow_name: str, result: dict[str, Any]) -> 
     return str(p)
 
 
+# ---------------------------------------------------------------- 异步执行
+
+
+async def _queue_runner(flow: str, variables: dict[str, Any]) -> dict[str, Any]:
+    """队列的执行函数：直接复用同步 flow_run 的完整逻辑。"""
+    return await flow_run(flow, variables)  # type: ignore[arg-type]
+
+
+TASK_QUEUE_BOUND = False
+
+
+def _ensure_queue() -> Any:
+    """首次用的时候绑定执行器（避免模块导入顺序问题）。"""
+    global TASK_QUEUE_BOUND
+    from engine.taskqueue import task_queue
+
+    if not TASK_QUEUE_BOUND:
+        task_queue.bind(_queue_runner)
+        TASK_QUEUE_BOUND = True
+    return task_queue
+
+
+@mcp.tool
+async def flow_run_async(
+    flow: str,
+    vars: dict | None = None,
+) -> dict[str, Any]:
+    """**异步跑流程**：立刻返回 task_id，不用等流程跑完。
+
+    为什么需要它：一个 29 秒的流程，同步调用会阻塞 29 秒；
+    n8n 并发触发时会排队甚至超时。异步提交后调用方立刻拿到 task_id，
+    自己决定什么时候来取结果（`flow_task`）。
+
+    **有队列**：浏览器是独占资源，同时跑两个流程会抢同一个页面。
+    所以任务按提交顺序**串行执行**（concurrency=1），返回里有 queue_position。
+    """
+    q = _ensure_queue()
+    name, err = _safe_flow(flow)
+    if err:
+        return err
+    p = FLOW_DIR / f"{name}.json"
+    if not p.exists():
+        return {"ok": False, "error": f"流程不存在: {name}"}
+    out = q.submit(name, vars or {})
+    return out
+
+
+@mcp.tool
+async def flow_task(task_id: str, full: bool = True) -> dict[str, Any]:
+    """查异步任务的状态与结果。
+
+    状态：queued（排队中）/ running（执行中）/ done / failed / cancelled
+    full=True 时带上完整的节点执行明细。
+    """
+    return _ensure_queue().get(task_id, full=full)
+
+
+@mcp.tool
+async def flow_tasks(limit: int = 20) -> dict[str, Any]:
+    """看队列概览：并发度、各状态计数、最近的若干个任务（含排队位置）。"""
+    return _ensure_queue().list_recent(limit=min(int(limit or 20), 100))
+
+
+@mcp.tool
+async def flow_cancel(task_id: str) -> dict[str, Any]:
+    """取消**还在排队**的任务。已经开始执行的不行（浏览器正在用页面）。"""
+    return _ensure_queue().cancel(task_id)
+
+
 @mcp.tool
 async def run_status(flow: str = "", limit: int = 10) -> dict[str, Any]:
     """查最近执行记录 + 各节点的耗时趋势（调参依据）。"""
