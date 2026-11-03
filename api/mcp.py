@@ -534,10 +534,6 @@ async def web_extract(
             不给 selector 就取该项的完整文本
     limit：最多抓多少项（默认 50）
 
-    例：web_extract(item="div.quote",
-                     fields=[{"name":"quote","selector":"span.text"},
-                             {"name":"author","selector":"small.author"}])
-
     ✅ 用：页面有一批**结构相同**的条目（商品卡 / 表格行 / 搜索结果）
 ❌ 别用：只取单个元素→web_read；不知道列表容器在哪→先 web_scan
     """
@@ -829,22 +825,12 @@ async def dom_inspect(target: str, depth: int = 4) -> dict[str, Any]:
 
 @mcp.tool
 async def record_start(variables: dict | None = None) -> dict[str, Any]:
-    """**开始录制**：之后每个成功的操作（打开页/点击/输入/选择/等待…）自动记成流程节点。
+    """**开始录制**：之后每个成功的操作（打开页/点击/输入/选择/等待）自动记成节点。
 
-    `variables` 声明参数（如 `{"title": "测试商品A", "price": "99"}`），
-    之后操作参数里写 `{{title}}` 就会在**执行时**换成实际值，
-    但**录进流程的是 `{title}` 模板** —— 生成的流程是参数化的，能反复跑不同数据。
+    `variables` 声明参数：`{"title":"商品A"}`，之后操作里写 `{{title}}`，
+    执行时换成实际值，录进流程的是 `{title}` 模板 —— 生成的流程可反复跑不同数据。
 
-    典型用法：
-        record_start()
-        web_open(kind="attach", cdp=...)   → 记录
-        web_scan()                          → 不记录（探索辅助）
-        element_pick(...)                   → 不记录（元素进库即可）
-        web_click("@el:xxx")                → 记录
-        record_stop(flow="我的流程")         → 生成 flows/我的流程.json
-
-    **不录**的：scan / web_fields / web_elem_info / element_check / web_verify
-    —— 它们是探索工具，跑流程时不需要。
+    只录写操作。scan / web_fields / element_check / web_verify 这类**探索工具不录**。
     """
     from engine.recorder import recorder
 
@@ -918,16 +904,12 @@ async def record_status() -> dict[str, Any]:
 async def call_node(name: str, args: dict | None = None) -> dict[str, Any]:
     """直接调用任意引擎节点（实验 / 调试用）。
 
-    **主要用途**：加或改了一个节点，还没封装成正式 MCP 工具时，
-    用这个立刻能试 —— 不用改 api/mcp.py、不用重连 MCP。
-
-    例：call_node("web_fields", {"max_label": 20})
-        call_node("web_scan", {"kind": "interactive", "limit": 50})
+    用途：写流程时需要一个**没封装成工具**的节点（122 个节点里 MCP 只包了 49 个）。
+    先用 inspect_node 查它的参数名，再 call_node 直接试。
 
     args 就是节点的原生参数（和流程 JSON 里 args 字段一致）。
 
-    ✅ 用：需要的能力**没封装成工具**（122 个节点里 MCP 只包了 49 个）
-❌ 别用：要跑一串操作→写流程用 flow_run
+    ❌ 要跑一串操作 → 写流程用 flow_run，别一个个 call_node
     """
     from engine.registry import registry
 
