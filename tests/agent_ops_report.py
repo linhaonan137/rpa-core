@@ -118,7 +118,7 @@ ISSUES = """\
 
 ### 🔴 P-04 / P-05 `flow_save` / `flow_read` 的 flow 名不做路径校验 —— 越界读 + 越界写
 
-- `flow_save(flow="../tmpa_escape")` → `{"ok": true, "path": "F:\\\\…\\\\rpa\\\\flows\\\\..\\\\tmpa_escape.json"}`，文件落到**项目根**
+- `flow_save(flow="../tmpa_escape")` → `{"ok": true, "path": "<project_root>/flows/../tmpa_escape.json"}`，文件落到**项目根**
 - `flow_read(flow="../elements")` → `{"ok": true, "flow": {...}}`，返回项目根 `elements.json` 全文
 - 原因：`api/mcp.py:580` `p = FLOW_DIR / f"{flow}.json"` 直接拼，没有走 `_safe_path`。其它 13 个工具都过了 `_safe_path`，唯独 flow 名的 5 个工具没有。
 - 危害：File 层做了严格限制（绝对路径/`..` 全拒），流程层却开后门，限制形同虚设。

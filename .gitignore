@@ -33,3 +33,11 @@ dist/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ---- 运行时产物补充（子代理审计发现）----
+rpa.db-journal
+flows/_meta/
+flows/.versions/
+.env
+.env.*
+!env.example

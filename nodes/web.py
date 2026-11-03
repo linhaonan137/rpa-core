@@ -584,7 +584,7 @@ async def web_open(args: dict[str, Any], ctx: ExecutionContext) -> Result:
 
 
 async def _attach_cdp(ctx: ExecutionContext, cdp_url: str = "http://127.0.0.1:9222") -> Any:
-    """接管一个已经在跑的浏览器（O09 共享 CDP）。
+    """接管一个已经在跑的浏览器（共享 CDP）。
 
     - connect_over_cdp 不注入自动化标志（引擎只是"连上去"），保留用户登录态
     - 挂 _ant_owned = True，stealth.apply 见到它就跳过
@@ -634,7 +634,7 @@ async def web_attach(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     """args: {cdp?, url?, page_identifier?, kind=url|title, match=contains|exact, wait_until, limit_ms}
 
     两种用法：
-      ① 给 cdp（如 http://127.0.0.1:9222）→ **接管外部浏览器**（O09 共享 CDP）：
+      ① 给 cdp（如 http://127.0.0.1:9222）→ **接管外部浏览器**（共享 CDP）：
          connect_over_cdp 连上去，挑一个已有页面。引擎不再自己 launch。
          接管的浏览器自动跳过 stealth 注入（指纹归浏览器自己管）。
       ② 不给 cdp → 在引擎已开的浏览器里按 url/title 挑一个已有页面。

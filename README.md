@@ -1,5 +1,7 @@
 # rpa-core
 
+> **平台：Windows**（依赖 SendInput / uiautomation / Win32 窗口操作）
+
 用 JSON 描述流程的 RPA 内核。**能被 AI Agent 直接调用**，也能脱离 Agent 独立跑（0 token）。
 
 ```
@@ -33,7 +35,7 @@ MCP          49 个工具                       <- AI Agent
 
 ```bash
 pip install -r requirements.txt
-playwright install chrome
+playwright install chrome chromium   # chromium 作为无系统 Chrome 时的回退
 
 python main.py run flows/demo.json      # 跑流程
 python main.py serve --port 8100        # HTTP 服务（含异步队列）
@@ -112,7 +114,7 @@ element_check()                                           # 体检
 
 ```python
 record_start(variables={"title": "测试商品"})
-web_open(kind="attach", cdp="http://127.0.0.1:9222", url="...")
+web_open(kind="attach", cdp="http://127.0.0.1:9222", url="example.com")
 element_pick(role="button", text="发布", key="publish")
 web_click(target="@el:publish")
 record_stop(flow="我的流程")
@@ -135,7 +137,7 @@ record_stop(flow="我的流程")
 ## 架构
 
 ```
-engine/          引擎（约 3,300 行）
+engine/          引擎（约 3,650 行）
   schema.py        流程/节点/边模型 + 校验
   graph.py         图解析（后继/前驱/可达/循环体）
   scheduler.py     调度（波次执行 + 死路剪枝）
@@ -148,7 +150,7 @@ engine/          引擎（约 3,300 行）
 
 nodes/          122 个节点（12 个域）
 elements/       元素库（六维指纹 + 降级定位）
-api/            mcp.py（49 工具）/ http.py（8 路由）/ taskqueue 队列
+api/            mcp.py（49 工具）/ http.py（10 路由）/ taskqueue 队列
 heal/           失败分类 + 元素自愈候选
 store/          SQLite（执行记录 + 耗时趋势）
 flows/          示例流程（7 个，含真实站点）
@@ -203,7 +205,6 @@ read_failure(level="dom")    # 带当时的 DOM 清单
 | `real_2_saucedemo.json` | 10 | 登录 + 购物车 + 断言（React SPA）|
 | `real_3_httpbin.json` | 9 | 原生表单提交（无 JS）|
 | `real_4_demoqa.json` | 10 | 复杂 SPA 表单（React + 广告 iframe）|
-| `taobao_publish_step1.json` | 20 | 电商后台类目选择（真实后台）|
 
 ```bash
 python main.py run flows/real_1_quotes.json
@@ -225,7 +226,7 @@ python main.py run flows/real_1_quotes.json
 
 ```
 122 节点 · 49 MCP 工具 · 579 测试
-引擎 3,300 行 / 测试 6,223 行
+引擎 3,656 行 / 测试 6,223 行
 ```
 
 ## License

@@ -9,3 +9,5 @@ pytest>=8.0
 pytest-asyncio>=0.24
 openpyxl>=3.1
 uiautomation>=2.0 ; sys_platform == "win32"
+# 可选：热键触发节点用（trig_hotkey）；不装则只有该功能不可用
+keyboard>=0.13 ; sys_platform == "win32"
