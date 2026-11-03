@@ -199,12 +199,12 @@ read_failure(level="dom")    # 带当时的 DOM 清单
 
 | 文件 | 节点 | 演示什么 |
 |---|---|---|
-| `demo.json` | 5 | 循环 + 变量 + 数据落盘 |
-| `demo_live.json` | 4 | 抓 quotes 摘句并落表 |
-| `real_1_quotes.json` | 8 | 分页抓取（静态站）|
-| `real_2_saucedemo.json` | 10 | 登录 + 购物车 + 断言（React SPA）|
-| `real_3_httpbin.json` | 9 | 原生表单提交（无 JS）|
-| `real_4_demoqa.json` | 10 | 复杂 SPA 表单（React + 广告 iframe）|
+| [`demo.json`](flows/demo.json) | 5 | 循环 + 变量 + 数据落盘 |
+| [`demo_live.json`](flows/demo_live.json) | 4 | 抓 quotes 摘句并落表 |
+| [`real_1_quotes.json`](flows/real_1_quotes.json) | 8 | 分页抓取（静态站）|
+| [`real_2_saucedemo.json`](flows/real_2_saucedemo.json) | 10 | 登录 + 购物车 + 断言（React SPA）|
+| [`real_3_httpbin.json`](flows/real_3_httpbin.json) | 9 | 原生表单提交（无 JS）|
+| [`real_4_demoqa.json`](flows/real_4_demoqa.json) | 10 | 复杂 SPA 表单（React + 广告 iframe）|
 
 ```bash
 python main.py run flows/real_1_quotes.json
@@ -214,13 +214,13 @@ python main.py run flows/real_1_quotes.json
 
 | 文档 | 内容 |
 |---|---|
-| `docs/MCP-DESIGN.md` | 工具粒度设计 |
-| `docs/MCP-TOOL-AUDIT.md` | 工具审计（370 组实测 + 修掉的 53 个问题）|
-| `docs/ELEMENT-CAPTURE.md` | 元素六维字段定义与抓取实现 |
-| `docs/ELEMENT-LIB-FIX.md` | 六维定位改造 |
-| `docs/REAL-MOUSE.md` | 真实鼠标实现与三个坑 |
-| `docs/REAL-SITE-TEST.md` | 真实站点验证记录 |
-| `docs/LESSONS.md` | 踩坑清单 |
+| [`docs/MCP-DESIGN.md`](docs/MCP-DESIGN.md) | 工具粒度设计 |
+| [`docs/MCP-TOOL-AUDIT.md`](docs/MCP-TOOL-AUDIT.md) | 工具审计（370 组实测 + 修掉的 53 个问题）|
+| [`docs/ELEMENT-CAPTURE.md`](docs/ELEMENT-CAPTURE.md) | 元素六维字段定义与抓取实现 |
+| [`docs/ELEMENT-LIB-FIX.md`](docs/ELEMENT-LIB-FIX.md) | 六维定位改造 |
+| [`docs/REAL-MOUSE.md`](docs/REAL-MOUSE.md) | 真实鼠标实现与三个坑 |
+| [`docs/REAL-SITE-TEST.md`](docs/REAL-SITE-TEST.md) | 真实站点验证记录 |
+| [`docs/LESSONS.md`](docs/LESSONS.md) | 踩坑清单 |
 
 ## 规模
 
