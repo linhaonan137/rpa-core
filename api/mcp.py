@@ -313,7 +313,7 @@ async def web_fill(
         # 然后无条件 verified=True，填不进去也报"已校验"，Agent 会带着错数据往下跑
         if r.get("ok") and verify:
             actual = await _call(
-                "web_read", {"target": target, "kind": "value", "limit_ms": 3000}
+                "web_elem_info", {"target": target, "attr": "value", "limit_ms": 3000}
             )
             got = str(actual.get("data") or "")
             want = str(value or "")
@@ -573,6 +573,238 @@ async def read_failure(run_id: str = "", level: str = "summary") -> dict[str, An
         snap["interactive"] = (snap.get("interactive") or [])[:40]
         snap["fields"] = (snap.get("fields") or [])[:40]
     return {"ok": True, **snap}
+
+
+@mcp.tool
+async def element_drop(
+    key: str = "",
+    keys: list[str] | None = None,
+    stale_only: bool = False,
+) -> dict[str, Any]:
+    """**删元素库条目**。录错了、测试残留、元素失效了都靠它清理。
+
+    - `key="xxx"`      删单个
+    - `keys=["a","b"]` 批量删
+    - `stale_only=True` 删除所有连续失败过的（配合 element_check 用）
+    """
+    from elements.store import ElementStore
+    from engine.paths import ELEMENTS_PATH
+
+    store = ElementStore(str(ELEMENTS_PATH))
+    targets: list[str] = []
+    if key:
+        targets.append(key)
+    if keys:
+        targets.extend(keys)
+    if stale_only:
+        targets.extend(k for k in store.keys() if store.get(k).is_stale())
+
+    targets = list(dict.fromkeys(t for t in targets if t))
+    if not targets:
+        return {"ok": False, "error": "没指定要删的（给 key / keys / stale_only=True）",
+                "hint": f"当前库里有 {len(store.keys())} 条"}
+
+    removed, missing = [], []
+    for t in targets:
+        if store.has(t):
+            store.remove(t, force=True)
+            removed.append(t)
+        else:
+            missing.append(t)
+    store.save()
+    return {
+        "ok": bool(removed),
+        "removed": removed,
+        "missing": missing,
+        "remaining": len(store.keys()),
+    }
+
+
+@mcp.tool
+async def element_diagnose(key: str) -> dict[str, Any]:
+    """**完整定位诊断**：六维逐层试了哪些、各命中几个、为什么失败/为什么降级。
+
+    和 `element_check` 的区别：check 只告诉你「成没成、走了哪层」，
+    diagnose 告诉你**每一层试了什么选择器、命中几个、有没有歧义** —— 修流程靠这个。
+
+    「命中 2 个」（歧义）和「命中 0 个」（不存在）的修法完全不同，
+    这个工具能区分出来。
+    """
+    from elements.resolve import resolve_fingerprint
+    from elements.store import ElementStore
+    from engine.paths import ELEMENTS_PATH
+
+    page = getattr(_ctx, "page", None)
+    if page is None:
+        return {"ok": False, "error": "还没连接浏览器，先 web_open"}
+
+    store = ElementStore(str(ELEMENTS_PATH))
+    if not store.has(key):
+        return {"ok": False, "error": f"元素库里没有 {key}",
+                "available": list(store.keys())[:20]}
+
+    e = store.get(key)
+    entry = {
+        "role": e.role,
+        "name": e.name,
+        "css": e.css,
+        "attrs": e.fingerprint.attrs,
+        "path": e.fingerprint.path,
+        "siblings": e.fingerprint.siblings,
+        "geometry": {"x": e.fingerprint.geometry.x, "y": e.fingerprint.geometry.y},
+        "tag": e.fingerprint.tag,
+        "label": (e.hints or {}).get("label") or "",
+    }
+
+    out: dict[str, Any] = {"ok": True, "key": key,
+                           "entry": {k: v for k, v in entry.items() if v}}
+    try:
+        loc, diag = await resolve_fingerprint(page, entry)
+    except Exception as exc:  # noqa: BLE001
+        out["ok"] = False
+        out["error"] = f"{type(exc).__name__}: {exc}"
+        return out
+
+    out["diag"] = _jsonable(diag) if diag else {}
+    if loc is None:
+        out["ok"] = False
+        out["verdict"] = "六维全部没命中 —— 元素可能已从页面消失，或页面结构大变"
+        out["suggest"] = "用 web_scan / web_fields 重新看页面，然后 element_pick 覆盖这个 key"
+        return out
+
+    # 命中之后：算清楚是不是歧义
+    tried = (diag or {}).get("tried") or []
+    counts = [t.get("count") for t in tried if isinstance(t.get("count"), int)]
+    out["verdict"] = (diag or {}).get("layer") or "?"
+    if (diag or {}).get("ambiguous"):
+        out["verdict"] = "命中多个且无法区分（歧义）—— 可能点错元素"
+        out["suggest"] = "加 hints（邻近文本）或换更精确的 target 重新拾取"
+    elif any(c and c > 1 for c in counts):
+        out["verdict"] = f"{out['verdict']}（曾命中多个，已用打分/可见性筛选）"
+    return out
+
+
+@mcp.tool
+async def list_tabs() -> dict[str, Any]:
+    """**列出浏览器所有标签页**（序号 / URL / 标题 / 是否当前页）。
+
+    attach 之前先看一眼，避免按 url 猜着连错页。
+    """
+    page = getattr(_ctx, "page", None)
+    if page is None:
+        return {"ok": False, "error": "还没连接浏览器，先 web_open"}
+    try:
+        pages = page.context.pages
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"取页面列表失败: {type(exc).__name__}: {exc}"}
+
+    tabs = []
+    for i, p in enumerate(pages):
+        info: dict[str, Any] = {"index": i, "active": p is page}
+        try:
+            info["url"] = str(p.url)[:140]
+        except Exception:  # noqa: BLE001
+            info["url"] = "?"
+        try:
+            info["title"] = (await p.title())[:60]
+        except Exception:  # noqa: BLE001
+            info["title"] = ""
+        tabs.append(info)
+    return {"ok": True, "count": len(tabs), "cdp": getattr(_ctx, "cdp_url", "") or "", "tabs": tabs}
+
+
+_JS_DOM_INSPECT = r"""
+([sel, depth]) => {
+  let el = null;
+  try { el = document.querySelector(sel); } catch (e) { return {error: "选择器非法: " + e.message}; }
+  if (!el) return {error: "页面上没有匹配 " + sel + " 的元素"};
+  const r = el.getBoundingClientRect();
+  const st = getComputedStyle(el);
+  const chain = [];
+  let p = el;
+  for (let i = 0; i < depth && p && p.tagName; i++, p = p.parentElement) {
+    chain.push({
+      tag: p.tagName.toLowerCase(),
+      id: p.id || "",
+      cls: String(p.className || "").slice(0, 70),
+      text: (p.innerText || "").trim().slice(0, 44),
+    });
+  }
+  const attrs = {};
+  for (const a of el.attributes) attrs[a.name] = String(a.value).slice(0, 70);
+  const sibs = [];
+  const par = el.parentElement;
+  if (par) {
+    for (const s of Array.from(par.children).slice(0, 10)) {
+      sibs.push({
+        tag: s.tagName.toLowerCase(),
+        cls: String(s.className || "").slice(0, 34),
+        text: (s.innerText || "").trim().slice(0, 26),
+        self: s === el,
+      });
+    }
+  }
+  return {
+    tag: el.tagName.toLowerCase(),
+    id: el.id || "",
+    cls: String(el.className || ""),
+    attrs: attrs,
+    text: (el.innerText || el.value || "").trim().slice(0, 160),
+    value: (el.value === undefined ? "" : String(el.value)).slice(0, 80),
+    box: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)],
+    visible: r.width > 0 && r.height > 0 && st.visibility !== "hidden" && st.display !== "none" && st.opacity !== "0",
+    style: {display: st.display, visibility: st.visibility, opacity: st.opacity,
+            cursor: st.cursor, position: st.position, zIndex: st.zIndex},
+    chain: chain,
+    siblings: sibs,
+  };
+}
+"""
+
+
+@mcp.tool
+async def dom_inspect(target: str, depth: int = 4) -> dict[str, Any]:
+    """**看元素的真实结构**：属性 / 类名 / 样式 / 祖先链 / 兄弟元素 / 可见性。
+
+    典型用途：定位失败时看"这个元素到底长什么样"、判断为什么 is_visible 是 false、
+    找一个稳定的属性（data-* / id）用来重拾取。
+
+    `target` 可以是 css 或 `@el:名字`。
+    """
+    page = getattr(_ctx, "page", None)
+    if page is None:
+        return {"ok": False, "error": "还没连接浏览器，先 web_open"}
+
+    sel = target
+    if str(target).startswith("@el:"):
+        from elements.store import ElementStore
+        from engine.paths import ELEMENTS_PATH
+
+        key = str(target)[4:].strip()
+        store = ElementStore(str(ELEMENTS_PATH))
+        if not store.has(key):
+            return {"ok": False, "error": f"元素库里没有 {key}",
+                    "available": list(store.keys())[:20]}
+        e = store.get(key)
+        sel = (e.css or "").strip()
+        if not sel:
+            # 没有显式 css 就用最稳的属性拼一个
+            attrs = e.fingerprint.attrs or {}
+            for a in ("data-testid", "data-spm", "name", "type", "id"):
+                if attrs.get(a):
+                    sel = f'{e.fingerprint.tag or "*"}[{a}="{attrs[a]}"]'
+                    break
+        if not sel:
+            return {
+                "ok": False,
+                "error": f"{key} 没有 css，也没法用属性拼选择器",
+                "hint": "直接传 css（如 `button.submit`）或用 web_scan 重新看页面",
+            }
+
+    info = await page.evaluate(_JS_DOM_INSPECT, [sel, max(1, min(int(depth or 4), 8))])
+    if isinstance(info, dict) and info.get("error"):
+        return {"ok": False, "error": info["error"], "selector": sel}
+    return {"ok": True, "selector": sel, "element": info}
 
 
 @mcp.tool
