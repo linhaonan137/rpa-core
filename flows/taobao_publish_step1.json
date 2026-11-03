@@ -1,5 +1,5 @@
 {
-  "name": "淘宝发品-类目选择（男装Polo衫+品牌23区）",
+  "name": "示例：电商后台类目选择（20 节点）",
   "version": 1,
   "nodes": [
     {
@@ -97,7 +97,7 @@
       },
       "args": {
         "cdp": "http://127.0.0.1:57032",
-        "url": "item.upload.taobao.com",
+        "url": "myseller.taobao.com",
         "kind": "url",
         "match": "contains",
         "limit_ms": 15000

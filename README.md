@@ -5,7 +5,7 @@
 ```
 CLI / EXE    rpa.exe run flows\xxx.json      <- 人 / 定时任务
 HTTP         POST /run/{name}                <- n8n / 其它系统
-MCP          43 个工具                       <- AI Agent
+MCP          49 个工具                       <- AI Agent
                     |
               引擎（DAG 调度 + 122 节点 + 元素库）
                     |
@@ -148,8 +148,10 @@ engine/          引擎（约 3,300 行）
 
 nodes/          122 个节点（12 个域）
 elements/       元素库（六维指纹 + 降级定位）
-api/            mcp.py（43 工具）/ http.py（8 路由）
+api/            mcp.py（49 工具）/ http.py（8 路由）/ taskqueue 队列
+heal/           失败分类 + 元素自愈候选
 store/          SQLite（执行记录 + 耗时趋势）
+flows/          示例流程（7 个，含真实站点）
 tests/          579 项
 ```
 
@@ -189,6 +191,24 @@ read_failure()               # 最近一次失败概要
 read_failure(level="dom")    # 带当时的 DOM 清单
 ```
 
+## 示例流程
+
+`flows/` 里有 7 个可直接跑的示例：
+
+| 文件 | 节点 | 演示什么 |
+|---|---|---|
+| `demo.json` | 5 | 循环 + 变量 + 数据落盘 |
+| `demo_live.json` | 4 | 抓 quotes 摘句并落表 |
+| `real_1_quotes.json` | 8 | 分页抓取（静态站）|
+| `real_2_saucedemo.json` | 10 | 登录 + 购物车 + 断言（React SPA）|
+| `real_3_httpbin.json` | 9 | 原生表单提交（无 JS）|
+| `real_4_demoqa.json` | 10 | 复杂 SPA 表单（React + 广告 iframe）|
+| `taobao_publish_step1.json` | 20 | 电商后台类目选择（真实后台）|
+
+```bash
+python main.py run flows/real_1_quotes.json
+```
+
 ## 文档
 
 | 文档 | 内容 |
@@ -204,7 +224,7 @@ read_failure(level="dom")    # 带当时的 DOM 清单
 ## 规模
 
 ```
-122 节点 · 43 MCP 工具 · 579 测试
+122 节点 · 49 MCP 工具 · 579 测试
 引擎 3,300 行 / 测试 6,223 行
 ```
 
