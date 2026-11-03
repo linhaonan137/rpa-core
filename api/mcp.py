@@ -913,7 +913,7 @@ async def call_node(name: str, args: dict | None = None) -> dict[str, Any]:
         return {
             "ok": False,
             "error": f"节点不存在: {name}",
-            "hint": "用 call_node('list_node_types') 看全部" if "list_node_types" in types else "",
+            "hint": "用 list_node_types 看全部" if "list_node_types" in types else "",
         }
     return await _call(name, dict(args or {}))
 
@@ -930,33 +930,6 @@ async def list_node_types(keyword: str = "") -> dict[str, Any]:
     if keyword:
         names = [n for n in names if keyword.lower() in n.lower()]
     return {"ok": True, "count": len(names), "nodes": names}
-
-
-@mcp.tool
-async def reload_nodes() -> dict[str, Any]:
-    """重新加载所有节点模块（改了 nodes/*.py 后不用重启 MCP）。
-
-    只对**节点层**改动有效：新增节点、改节点实现、改 JS 注入脚本。
-    如果改的是 api/mcp.py 里的工具签名（参数增删），仍然需要重连。
-    """
-    import sys as _sys
-
-    import nodes as _n
-
-    cleared = []
-    for mod in list(_sys.modules):
-        if mod.startswith("nodes."):
-            del _sys.modules[mod]
-            cleared.append(mod)
-    failed = _n.load_all()
-    from engine.registry import registry
-
-    return {
-        "ok": not failed,
-        "reloaded_modules": len(cleared),
-        "failed": failed,
-        "nodes": len(registry.types()),
-    }
 
 
 @mcp.tool
@@ -1774,6 +1747,265 @@ async def flow_tasks(limit: int = 20) -> dict[str, Any]:
 async def flow_cancel(task_id: str) -> dict[str, Any]:
     """取消**还在排队**的任务。已经开始执行的不行（浏览器正在用页面）。"""
     return _ensure_queue().cancel(task_id)
+
+
+# ---------------------------------------------------------------- 流程结构编辑
+
+
+def _next_node_id(raw: dict) -> str:
+    used = {str(n.get("id")) for n in (raw.get("nodes") or [])}
+    i = 1
+    while f"n{i}" in used:
+        i += 1
+    return f"n{i}"
+
+
+def _has_branch_edges(raw: dict) -> bool:
+    return any(e.get("exit") for e in (raw.get("edges") or []))
+
+
+def _plain_out(raw: dict, node_id: str) -> list[dict]:
+    return [e for e in (raw.get("edges") or []) if e.get("from") == node_id and not e.get("exit")]
+
+
+def _plain_in(raw: dict, node_id: str) -> list[dict]:
+    return [e for e in (raw.get("edges") or []) if e.get("to") == node_id and not e.get("exit")]
+
+
+@mcp.tool
+async def flow_add_node(
+    flow: str,
+    after: str,
+    type: str,
+    args: dict | None = None,
+    node_id: str = "",
+    label: str = "",
+    on_fail: dict | None = None,
+    expect: dict | None = None,
+    reason: str = "",
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """**在 after 节点后面插入新节点**，自动把前后的边接好。
+
+    `after=""` → 插到流程最前面（成为新的起始节点）。
+    `node_id` 不给就自动取一个没占用的 n<N>。
+    """
+    flow, err = _safe_flow(flow)
+    if err:
+        return err
+    if not reason:
+        return {"ok": False, "error": "必须给 reason（写进审计流水）"}
+
+    from engine.registry import registry
+
+    if type not in registry.types():
+        near = [t for t in registry.types() if type.split("_")[0] in t][:8]
+        return {"ok": False, "error": f"节点类型不存在: {type}", "similar": near}
+
+    p = FLOW_DIR / f"{flow}.json"
+    if not p.exists():
+        return {"ok": False, "error": f"流程不存在: {flow}"}
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    if _has_branch_edges(raw):
+        return {"ok": False, "error": "流程含分支/循环边（带 exit），结构编辑不支持",
+                "hint": "用 flow_save 整份重写，或先用 flow_read 看边定义"}
+
+    nodes = raw.setdefault("nodes", [])
+    edges = raw.setdefault("edges", [])
+    ids = {str(n.get("id")) for n in nodes}
+    if node_id and node_id in ids:
+        return {"ok": False, "error": f"节点 id 已被占用: {node_id}"}
+    nid = node_id or _next_node_id(raw)
+
+    new_node: dict[str, Any] = {
+        "id": nid,
+        "type": type,
+        "args": dict(args or {}),
+        "label": label or type,
+        "off": False,
+        "budget_ms": 0,
+    }
+    if on_fail is not None:
+        new_node["on_fail"] = on_fail
+    if expect is not None:
+        new_node["expect"] = expect
+
+    changes: list[str] = []
+    if not after:
+        # 插到最前：原来的起始节点成为新节点的后继
+        starts = [n.get("id") for n in nodes if not _plain_in(raw, str(n.get("id")))]
+        nodes.append(new_node)
+        for s in starts:
+            edges.append({"id": f"e-{nid}-{s}", "from": nid, "to": s})
+            changes.append(f"{nid} → {s}")
+    else:
+        if after not in ids:
+            return {"ok": False, "error": f"after 节点不存在: {after}"}
+        outs = _plain_out(raw, after)
+        nodes.append(new_node)
+        # after 的出边改指到新节点
+        for e in outs:
+            target = e.get("to")
+            e["to"] = nid
+            changes.append(f"{after} → {target} 改为 {after} → {nid}")
+            edges.append({"id": f"e-{nid}-{target}", "from": nid, "to": target})
+            changes.append(f"{nid} → {target}")
+        if not outs:
+            changes.append(f"{nid} 接在 {after} 之后（{after} 原本无后继，作为终点）")
+            edges.append({"id": f"e-{after}-{nid}", "from": after, "to": nid})
+            changes.append(f"{after} → {nid}")
+
+    # 用 Flow 校验一遍，防止写出跑不了的结构
+    try:
+        Flow(**raw)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"改完结构校验失败，未落盘: {exc}"}
+
+    if dry_run:
+        return {"ok": True, "dry_run": True, "would_add": new_node, "edge_changes": changes,
+                "hint": "确认无误后 dry_run=False 落盘"}
+
+    snap = _snapshot(p, raw)
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
+    _log_change(flow, nid, {"op": "add", "type": type, "edges": changes}, reason, snap)
+    return {"ok": True, "node": nid, "type": type, "edge_changes": changes,
+            "nodes": len(raw["nodes"]), "snapshot": snap}
+
+
+@mcp.tool
+async def flow_drop_node(
+    flow: str,
+    node: str,
+    reason: str = "",
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """**删除节点**，自动把它的前驱接到后继（保持链路不断）。"""
+    flow, err = _safe_flow(flow)
+    if err:
+        return err
+    if not reason:
+        return {"ok": False, "error": "必须给 reason（写进审计流水）"}
+
+    p = FLOW_DIR / f"{flow}.json"
+    if not p.exists():
+        return {"ok": False, "error": f"流程不存在: {flow}"}
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    if _has_branch_edges(raw):
+        return {"ok": False, "error": "流程含分支/循环边，结构编辑不支持"}
+
+    nodes = raw.get("nodes") or []
+    edges = raw.get("edges") or []
+    if not any(str(n.get("id")) == node for n in nodes):
+        return {"ok": False, "error": f"节点不存在: {node}"}
+
+    ins = _plain_in(raw, node)
+    outs = _plain_out(raw, node)
+    preds = [e.get("from") for e in ins]
+    succs = [e.get("to") for e in outs]
+
+    # 删掉与它相关的所有边
+    raw["edges"] = [e for e in edges if e.get("from") != node and e.get("to") != node]
+    raw["nodes"] = [n for n in nodes if str(n.get("id")) != node]
+
+    changes: list[str] = [f"删除节点 {node}（前驱 {preds} 后继 {succs}）"]
+    # 前驱直连后继（取第一个前驱 × 第一个后继，避免笛卡尔爆炸）
+    if preds and succs:
+        a, b = preds[0], succs[0]
+        raw["edges"].append({"id": f"e-{a}-{b}", "from": a, "to": b})
+        changes.append(f"重连 {a} → {b}")
+        if len(preds) > 1 or len(succs) > 1:
+            changes.append(f"⚠ 有多个前驱/后继（{preds} / {succs}），只重连了第一对，其余连线已删")
+    elif succs:
+        changes.append(f"{node} 是起始节点，{succs[0]} 变成新的起始")
+    elif preds:
+        changes.append(f"{node} 是终点，{preds[0]} 成为新的终点")
+
+    try:
+        Flow(**raw)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"改完结构校验失败，未落盘: {exc}"}
+
+    if dry_run:
+        return {"ok": True, "dry_run": True, "would_drop": node, "changes": changes}
+
+    snap = _snapshot(p, raw)
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
+    _log_change(flow, node, {"op": "drop", "changes": changes}, reason, snap)
+    return {"ok": True, "dropped": node, "changes": changes,
+            "nodes": len(raw["nodes"]), "snapshot": snap}
+
+
+@mcp.tool
+async def flow_move_node(
+    flow: str,
+    node: str,
+    after: str,
+    reason: str = "",
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """**把节点挪到 after 后面**（自动重连，等价于先摘后插）。"""
+    flow, err = _safe_flow(flow)
+    if err:
+        return err
+    if not reason:
+        return {"ok": False, "error": "必须给 reason（写进审计流水）"}
+    if node == after:
+        return {"ok": False, "error": "node 和 after 是同一个节点"}
+
+    p = FLOW_DIR / f"{flow}.json"
+    if not p.exists():
+        return {"ok": False, "error": f"流程不存在: {flow}"}
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    if _has_branch_edges(raw):
+        return {"ok": False, "error": "流程含分支/循环边，结构编辑不支持"}
+
+    nodes = raw.get("nodes") or []
+    ids = {str(n.get("id")) for n in nodes}
+    if node not in ids:
+        return {"ok": False, "error": f"节点不存在: {node}"}
+    if after not in ids:
+        return {"ok": False, "error": f"after 节点不存在: {after}"}
+
+    changes: list[str] = []
+    # 1) 摘下 node：前驱直连后继
+    preds = [e.get("from") for e in _plain_in(raw, node)]
+    succs = [e.get("to") for e in _plain_out(raw, node)]
+    raw["edges"] = [e for e in (raw.get("edges") or [])
+                    if e.get("from") != node and e.get("to") != node]
+    if preds and succs:
+        raw["edges"].append({"id": f"e-{preds[0]}-{succs[0]}", "from": preds[0], "to": succs[0]})
+        changes.append(f"摘下时重连 {preds[0]} → {succs[0]}")
+
+    # 2) 插到 after 后面
+    outs = [e for e in raw["edges"] if e.get("from") == after and not e.get("exit")]
+    if outs:
+        for e in outs:
+            tgt = e.get("to")
+            e["to"] = node
+            raw["edges"].append({"id": f"e-{node}-{tgt}", "from": node, "to": tgt})
+            changes.append(f"{after} → {tgt} 改为 {after} → {node} → {tgt}")
+    else:
+        raw["edges"].append({"id": f"e-{after}-{node}", "from": after, "to": node})
+        changes.append(f"{after} → {node}")
+
+    try:
+        Flow(**raw)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"改完结构校验失败，未落盘: {exc}"}
+
+    if dry_run:
+        return {"ok": True, "dry_run": True, "would_move": node, "after": after, "changes": changes}
+
+    snap = _snapshot(p, raw)
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
+    _log_change(flow, node, {"op": "move", "after": after, "changes": changes}, reason, snap)
+    return {"ok": True, "moved": node, "after": after, "changes": changes, "snapshot": snap}
 
 
 @mcp.tool
