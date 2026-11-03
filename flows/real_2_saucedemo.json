@@ -1,0 +1,37 @@
+{
+  "name": "真实站点 2/4：登录+购物车+断言（saucedemo，React SPA）",
+  "version": 1,
+  "vars": [
+    {"name": "user", "value": "standard_user"},
+    {"name": "pwd", "value": "secret_sauce"}
+  ],
+  "nodes": [
+    {"id": "n1", "type": "web_open", "args": {"url": "https://www.saucedemo.com/", "until": "dom", "limit_ms": 45000}, "label": "打开登录页"},
+    {"id": "n2", "type": "web_type", "args": {"target": "#user-name", "value": "{user}", "limit_ms": 15000}, "label": "填用户名"},
+    {"id": "n3", "type": "web_type", "args": {"target": "#password", "value": "{pwd}", "limit_ms": 15000}, "label": "填密码"},
+    {"id": "n4", "type": "web_click", "args": {"target": "#login-button", "limit_ms": 15000}, "label": "点登录"},
+    {"id": "n5", "type": "web_wait", "args": {"target": ".inventory_list", "state": "visible", "limit_ms": 20000}, "label": "等商品列表"},
+    {"id": "n6", "type": "web_js", "args": {
+      "code": "() => ({url: location.href, items: document.querySelectorAll('.inventory_item').length, first: document.querySelector('.inventory_item_name')?.innerText, price: document.querySelector('.inventory_item_price')?.innerText})",
+      "save_as": "inv"
+    }, "label": "读商品列表状态"},
+    {"id": "n7", "type": "web_click", "args": {"target": ".btn_inventory", "limit_ms": 15000}, "label": "加第一个商品到购物车"},
+    {"id": "n8", "type": "web_js", "args": {
+      "code": "() => { const b = document.querySelector('.shopping_cart_badge'); return {badge: b ? b.innerText : null, cart: !!document.querySelector('.shopping_cart_link')}; }",
+      "save_as": "cart"
+    }, "label": "读购物车角标"},
+    {"id": "n9", "type": "web_shot", "args": {"path": "out/real_saucedemo.png"}, "label": "截图"},
+    {"id": "n10", "type": "web_close", "args": {"kind": "all"}, "label": "收尾"}
+  ],
+  "edges": [
+    {"id": "e1", "from": "n1", "to": "n2"},
+    {"id": "e2", "from": "n2", "to": "n3"},
+    {"id": "e3", "from": "n3", "to": "n4"},
+    {"id": "e4", "from": "n4", "to": "n5"},
+    {"id": "e5", "from": "n5", "to": "n6"},
+    {"id": "e6", "from": "n6", "to": "n7"},
+    {"id": "e7", "from": "n7", "to": "n8"},
+    {"id": "e8", "from": "n8", "to": "n9"},
+    {"id": "e9", "from": "n9", "to": "n10"}
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "验证：接管外部浏览器（O09）",
+  "version": 1,
+  "nodes": [
+    {"id": "n1", "type": "web_attach", "args": {"cdp": "http://127.0.0.1:9223"}, "label": "接管 9222 浏览器"},
+    {"id": "n2", "type": "web_open", "args": {"url": "https://www.baidu.com", "kind": "new_tab", "wait_until": "dom", "limit_ms": 45000}, "label": "在被接管浏览器里开新标签"},
+    {"id": "n3", "type": "web_js", "args": {
+      "code": "() => { const u = document.querySelector('.s-top-username, #s-user-name'); return {title: document.title.slice(0,20), login_area: u ? u.innerText.trim().slice(0,20) : '(找不到用户区)', cookie_len: document.cookie.length}; }",
+      "save_as": "state"
+    }, "label": "读登录态"},
+    {"id": "n4", "type": "web_shot", "args": {"path": "out/attach_test.png"}, "label": "截图"},
+    {"id": "n5", "type": "web_close", "args": {"kind": "page"}, "label": "关掉自己开的标签（不动用户标签）"}
+  ],
+  "edges": [
+    {"id": "e1", "from": "n1", "to": "n2"},
+    {"id": "e2", "from": "n2", "to": "n3"},
+    {"id": "e3", "from": "n3", "to": "n4"},
+    {"id": "e4", "from": "n4", "to": "n5"}
+  ]
+}

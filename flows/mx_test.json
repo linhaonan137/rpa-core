@@ -1,0 +1,23 @@
+{
+  "name": "矩阵测试",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "set_var",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "name": "x",
+        "value": 2
+      },
+      "off": false,
+      "budget_ms": 0
+    }
+  ],
+  "edges": [],
+  "vars": [],
+  "elements": {}
+}

@@ -1,0 +1,21 @@
+{
+  "name": "真实站点验证 1：百度搜索",
+  "version": 1,
+  "nodes": [
+    {"id": "n1", "type": "web_open", "args": {"url": "https://www.baidu.com", "until": "dom", "limit_ms": 30000}, "label": "打开百度"},
+    {"id": "n2", "type": "web_type", "args": {"target": "#kw", "value": "RPA 自动化", "limit_ms": 15000}, "label": "输入搜索词"},
+    {"id": "n3", "type": "web_click", "args": {"target": "#su", "limit_ms": 15000}, "label": "点百度一下"},
+    {"id": "n4", "type": "web_wait", "args": {"target": "#content_left", "state": "visible", "limit_ms": 20000}, "label": "等结果列表"},
+    {"id": "n5", "type": "web_elem_info", "args": {"target": "#content_left h3", "kind": "text", "save_as": "first_result", "limit_ms": 15000}, "label": "读第一条结果"},
+    {"id": "n6", "type": "web_shot", "args": {"path": "out/real_baidu.png"}, "label": "截图存证"},
+    {"id": "n7", "type": "web_close", "args": {"kind": "all"}, "label": "收尾"}
+  ],
+  "edges": [
+    {"id": "e1", "from": "n1", "to": "n2"},
+    {"id": "e2", "from": "n2", "to": "n3"},
+    {"id": "e3", "from": "n3", "to": "n4"},
+    {"id": "e4", "from": "n4", "to": "n5"},
+    {"id": "e5", "from": "n5", "to": "n6"},
+    {"id": "e6", "from": "n6", "to": "n7"}
+  ]
+}

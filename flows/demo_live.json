@@ -1,0 +1,84 @@
+{
+  "name": "演示：抓 quotes 摘句落表",
+  "version": 2,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "web_open",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "until": "dom",
+        "url": "https://quotes.toscrape.com/"
+      },
+      "label": "打开站点",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n2",
+      "type": "web_matches",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "limit": 10,
+        "save_as": "rows",
+        "target": "div.quote"
+      },
+      "label": "抓 10 条摘句",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n3",
+      "type": "data_sheet_write",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "path": "out/quotes_flow.xlsx",
+        "rows": "{rows}",
+        "sheet": "摘句"
+      },
+      "label": "落表",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n4",
+      "type": "web_close",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {},
+      "label": "关页面",
+      "off": false,
+      "budget_ms": 0
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "id": "e2",
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "id": "e3",
+      "from": "n3",
+      "to": "n4"
+    }
+  ],
+  "vars": [],
+  "elements": {}
+}

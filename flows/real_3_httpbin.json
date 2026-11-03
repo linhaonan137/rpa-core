@@ -1,0 +1,25 @@
+{
+  "name": "真实站点 3/4：原生表单提交（httpbin，无 JS）",
+  "version": 1,
+  "nodes": [
+    {"id": "n1", "type": "web_open", "args": {"url": "https://httpbin.org/forms/post", "until": "load", "limit_ms": 45000}, "label": "打开表单页"},
+    {"id": "n2", "type": "web_type", "args": {"target": "input[name=custname]", "value": "张三", "limit_ms": 15000}, "label": "填姓名"},
+    {"id": "n3", "type": "web_type", "args": {"target": "input[name=custtel]", "value": "13800138000", "limit_ms": 15000}, "label": "填电话"},
+    {"id": "n4", "type": "web_type", "args": {"target": "input[name=custemail]", "value": "zhangsan@example.com", "limit_ms": 15000}, "label": "填邮箱"},
+    {"id": "n5", "type": "web_click", "args": {"target": "button", "limit_ms": 15000}, "label": "提交"},
+    {"id": "n6", "type": "web_wait", "args": {"target": "pre", "state": "visible", "limit_ms": 20000}, "label": "等返回 JSON"},
+    {"id": "n7", "type": "web_elem_info", "args": {"target": "pre", "kind": "text", "save_as": "resp", "limit_ms": 15000}, "label": "读返回内容"},
+    {"id": "n8", "type": "web_shot", "args": {"path": "out/real_httpbin.png"}, "label": "截图"},
+    {"id": "n9", "type": "web_close", "args": {"kind": "all"}, "label": "收尾"}
+  ],
+  "edges": [
+    {"id": "e1", "from": "n1", "to": "n2"},
+    {"id": "e2", "from": "n2", "to": "n3"},
+    {"id": "e3", "from": "n3", "to": "n4"},
+    {"id": "e4", "from": "n4", "to": "n5"},
+    {"id": "e5", "from": "n5", "to": "n6"},
+    {"id": "e6", "from": "n6", "to": "n7"},
+    {"id": "e7", "from": "n7", "to": "n8"},
+    {"id": "e8", "from": "n8", "to": "n9"}
+  ]
+}

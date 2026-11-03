@@ -1,0 +1,131 @@
+{
+  "name": "端到端示例：循环 + 变量 + 数据落盘",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "set_var",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "name": "rows",
+        "value": []
+      },
+      "label": "初始化空列表",
+      "off": false,
+      "on_fail": {
+        "mode": "skip",
+        "attempts": 2,
+        "backoff_ms": 1000
+      },
+      "budget_ms": 0
+    },
+    {
+      "id": "n2",
+      "type": "loop",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "kind": "count",
+        "count": 3
+      },
+      "label": "循环 3 轮",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n3",
+      "type": "set_var",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "name": "item",
+        "value": "第 {_index} 条"
+      },
+      "label": "造一条数据",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n4",
+      "type": "noop",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {},
+      "label": "占位：真实场景这里是点击/抓取",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n5",
+      "type": "data_sheet_write",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "path": "out/demo.xlsx",
+        "sheet": "数据",
+        "rows": [
+          {
+            "序号": 1,
+            "说明": "循环结束后写表"
+          }
+        ]
+      },
+      "label": "写 Excel",
+      "off": false,
+      "on_fail": {
+        "mode": "skip",
+        "attempts": 2,
+        "backoff_ms": 1000
+      },
+      "budget_ms": 0,
+      "_note": "缺 openpyxl 时跳过，不影响整条链跑通"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "id": "e2",
+      "from": "n2",
+      "to": "n3",
+      "exit": "loop"
+    },
+    {
+      "id": "e3",
+      "from": "n3",
+      "to": "n4"
+    },
+    {
+      "id": "e4",
+      "from": "n4",
+      "to": "n2"
+    },
+    {
+      "id": "e5",
+      "from": "n2",
+      "to": "n5",
+      "exit": "done"
+    }
+  ],
+  "vars": [
+    {
+      "name": "rows",
+      "value": []
+    }
+  ],
+  "elements": {}
+}

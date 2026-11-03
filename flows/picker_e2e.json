@@ -1,0 +1,28 @@
+{
+  "name": "验证：拾取器闭环（pick → @el: 引用）",
+  "version": 1,
+  "vars": [{"name": "keyword", "value": "RPA 元素库"}],
+  "nodes": [
+    {"id": "n1", "type": "web_open", "args": {"url": "https://www.baidu.com", "until": "dom", "limit_ms": 45000, "headless": false}, "label": "打开百度"},
+    {"id": "n2", "type": "web_wait", "args": {"target": "#chat-textarea", "state": "attached", "limit_ms": 30000}, "label": "等输入框"},
+    {"id": "n3", "type": "web_pick", "args": {"selector": "#chat-textarea", "key": "baidu_search_box", "store": "elements.json"}, "label": "拾取输入框写进元素库"},
+    {"id": "n4", "type": "web_pick", "args": {"selector": "#chat-submit-button", "key": "baidu_submit", "store": "elements.json"}, "label": "拾取提交按钮"},
+    {"id": "n5", "type": "web_type", "args": {"target": "@el:baidu_search_box", "value": "{keyword}", "kind": "press", "delay_ms": 50, "limit_ms": 20000}, "label": "用 @el: 引用填内容"},
+    {"id": "n6", "type": "web_click", "args": {"target": "@el:baidu_submit", "limit_ms": 20000}, "label": "用 @el: 引用点按钮"},
+    {"id": "n7", "type": "wait", "args": {"ms": 5000}, "label": "等结果"},
+    {"id": "n8", "type": "web_shot", "args": {"path": "out/picker_e2e.png"}, "label": "截图"},
+    {"id": "n9", "type": "web_pick_list", "args": {}, "label": "回读元素库"},
+    {"id": "n10", "type": "web_close", "args": {"kind": "all"}, "label": "收尾"}
+  ],
+  "edges": [
+    {"id": "e1", "from": "n1", "to": "n2"},
+    {"id": "e2", "from": "n2", "to": "n3"},
+    {"id": "e3", "from": "n3", "to": "n4"},
+    {"id": "e4", "from": "n4", "to": "n5"},
+    {"id": "e5", "from": "n5", "to": "n6"},
+    {"id": "e6", "from": "n6", "to": "n7"},
+    {"id": "e7", "from": "n7", "to": "n8"},
+    {"id": "e8", "from": "n8", "to": "n9"},
+    {"id": "e9", "from": "n9", "to": "n10"}
+  ]
+}

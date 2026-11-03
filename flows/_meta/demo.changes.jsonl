@@ -1,0 +1,1 @@
+{"ts": "2026-11-03T20:55:15", "flow": "demo", "node": "n1", "diff": {"on_fail": {"from": null, "to": {"mode": "skip"}}}, "reason": "t", "snap": "demo.snap-0001.json"}

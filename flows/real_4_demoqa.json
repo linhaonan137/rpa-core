@@ -1,0 +1,27 @@
+{
+  "name": "真实站点 4/4：复杂 SPA 表单（demoqa，React + 广告 iframe）",
+  "version": 1,
+  "nodes": [
+    {"id": "n1", "type": "web_open", "args": {"url": "https://demoqa.com/text-box", "until": "dom", "limit_ms": 60000}, "label": "打开 text-box 页"},
+    {"id": "n2", "type": "web_wait", "args": {"target": "#userName", "state": "visible", "limit_ms": 30000}, "label": "等表单渲染"},
+    {"id": "n3", "type": "web_type", "args": {"target": "#userName", "value": "李四", "limit_ms": 15000}, "label": "填姓名"},
+    {"id": "n4", "type": "web_type", "args": {"target": "#userEmail", "value": "lisi@test.com", "limit_ms": 15000}, "label": "填邮箱"},
+    {"id": "n5", "type": "web_type", "args": {"target": "#currentAddress", "value": "北京市朝阳区", "limit_ms": 15000}, "label": "填地址"},
+    {"id": "n6", "type": "web_click", "args": {"target": "#submit", "limit_ms": 15000}, "label": "提交"},
+    {"id": "n7", "type": "web_wait", "args": {"target": "#output", "state": "visible", "limit_ms": 20000}, "label": "等输出区"},
+    {"id": "n8", "type": "web_elem_info", "args": {"target": "#output", "kind": "text", "save_as": "output", "limit_ms": 15000}, "label": "读输出"},
+    {"id": "n9", "type": "web_shot", "args": {"path": "out/real_demoqa.png"}, "label": "截图"},
+    {"id": "n10", "type": "web_close", "args": {"kind": "all"}, "label": "收尾"}
+  ],
+  "edges": [
+    {"id": "e1", "from": "n1", "to": "n2"},
+    {"id": "e2", "from": "n2", "to": "n3"},
+    {"id": "e3", "from": "n3", "to": "n4"},
+    {"id": "e4", "from": "n4", "to": "n5"},
+    {"id": "e5", "from": "n5", "to": "n6"},
+    {"id": "e6", "from": "n6", "to": "n7"},
+    {"id": "e7", "from": "n7", "to": "n8"},
+    {"id": "e8", "from": "n8", "to": "n9"},
+    {"id": "e9", "from": "n9", "to": "n10"}
+  ]
+}

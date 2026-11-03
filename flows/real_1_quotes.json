@@ -1,0 +1,29 @@
+{
+  "name": "真实站点 1/4：分页抓取（quotes.toscrape）",
+  "version": 1,
+  "nodes": [
+    {"id": "n1", "type": "web_open", "args": {"url": "https://quotes.toscrape.com/", "until": "dom", "limit_ms": 45000}, "label": "打开首页"},
+    {"id": "n2", "type": "web_js", "args": {
+      "code": "() => Array.from(document.querySelectorAll('div.quote')).map(q => ({text: q.querySelector('span.text').innerText.replace(/[“”]/g,'').trim(), author: q.querySelector('small.author').innerText.trim(), tags: Array.from(q.querySelectorAll('a.tag')).map(t=>t.innerText).join(',')}))",
+      "save_as": "page1"
+    }, "label": "抓第 1 页 10 条"},
+    {"id": "n3", "type": "web_click", "args": {"target": "li.next a", "limit_ms": 15000}, "label": "点下一页"},
+    {"id": "n4", "type": "wait", "args": {"ms": 1200}, "label": "等翻页"},
+    {"id": "n5", "type": "web_js", "args": {
+      "code": "() => Array.from(document.querySelectorAll('div.quote')).map(q => ({text: q.querySelector('span.text').innerText.replace(/[“”]/g,'').trim(), author: q.querySelector('small.author').innerText.trim(), tags: Array.from(q.querySelectorAll('a.tag')).map(t=>t.innerText).join(',')}))",
+      "save_as": "page2"
+    }, "label": "抓第 2 页"},
+    {"id": "n6", "type": "web_js", "args": {"code": "() => ({url: location.href, count: document.querySelectorAll('div.quote').length})", "save_as": "page2_meta"}, "label": "第 2 页元信息"},
+    {"id": "n7", "type": "data_sheet_write", "args": {"path": "out/quotes.xlsx", "sheet": "quotes", "rows": "{page2}"}, "label": "写 Excel（第 2 页）"},
+    {"id": "n8", "type": "web_close", "args": {"kind": "all"}, "label": "收尾"}
+  ],
+  "edges": [
+    {"id": "e1", "from": "n1", "to": "n2"},
+    {"id": "e2", "from": "n2", "to": "n3"},
+    {"id": "e3", "from": "n3", "to": "n4"},
+    {"id": "e4", "from": "n4", "to": "n5"},
+    {"id": "e5", "from": "n5", "to": "n6"},
+    {"id": "e6", "from": "n6", "to": "n7"},
+    {"id": "e7", "from": "n7", "to": "n8"}
+  ]
+}

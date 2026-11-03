@@ -1,0 +1,6 @@
+{"ts": "2026-11-03T19:37:13", "flow": "mx_test", "node": "n1", "diff": {"args": {"from": {"name": "x", "value": 1}, "to": {"name": "x", "value": 2}}}, "reason": "矩阵测试", "snap": "mx_test.snap-0001.json"}
+{"ts": "2026-11-03T19:39:48", "flow": "mx_test", "node": "n1", "diff": {"args": {"from": {"name": "x", "value": 1}, "to": {"name": "x", "value": 2}}}, "reason": "矩阵测试", "snap": "mx_test.snap-0002.json"}
+{"ts": "2026-11-03T19:41:15", "flow": "mx_test", "node": "n1", "diff": {"args": {"from": {"name": "x", "value": 1}, "to": {"name": "x", "value": 2}}}, "reason": "矩阵测试", "snap": "mx_test.snap-0003.json"}
+{"ts": "2026-11-03T19:43:08", "flow": "mx_test", "node": "n1", "diff": {"args": {"from": {"name": "x", "value": 1}, "to": {"name": "x", "value": 2}}}, "reason": "矩阵测试", "snap": "mx_test.snap-0004.json"}
+{"ts": "2026-11-03T19:47:12", "flow": "mx_test", "node": "n1", "diff": {"args": {"from": {"name": "x", "value": 1}, "to": {"name": "x", "value": 2}}}, "reason": "矩阵测试", "snap": "mx_test.snap-0005.json"}
+{"ts": "2026-11-03T20:12:51", "flow": "mx_test", "node": "n1", "diff": {"args": {"from": {"name": "x", "value": 1}, "to": {"name": "x", "value": 2}}}, "reason": "矩阵测试", "snap": "mx_test.snap-0006.json"}

@@ -1,0 +1,35 @@
+# ---- Python ----
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- 运行时产物（含用户数据，绝不能提交）----
+out/
+rpa.db
+rpa.db-shm
+rpa.db-wal
+elements.json
+flows/*.tmp
+
+# ---- 浏览器 profile（含登录 Cookie / 密码库 / 浏览历史）----
+.chrome-debug-profile/
+*.profile/
+chrome-profile/
+
+# ---- 内部文档（开发过程记录，不随开源发布）----
+docs/internal/
+
+# ---- 构建 ----
+build/
+dist/
+*.spec
+!rpa.spec
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+desktop.ini
