@@ -911,7 +911,7 @@ async def element_check(keys: list[str] | None = None) -> dict[str, Any]:
 
 @mcp.tool
 async def web_capture(
-    kind: Literal["web_shot", "download", "image"] = "web_shot",
+    kind: Literal["shot", "download", "image"] = "shot",
     target: str = "",
     path: str = "",
     name: str = "",
@@ -922,7 +922,7 @@ async def web_capture(
 
     name：文件名（不给就按秒自动命名 —— 同一秒两次会互相覆盖，建议给）
     """
-    kind, err = _merge_action(action, kind, allowed=('web_shot', 'download', 'image'), default='web_shot')
+    kind, err = _merge_action(action, kind, allowed=("shot", "download", "image"), default="shot")
     if err:
         return err
     if path:
