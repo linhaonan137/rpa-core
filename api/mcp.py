@@ -342,6 +342,10 @@ async def web_read(
     """从页面取内容：文本/值/属性/HTML/元素列表/子元素/兄弟/执行 JS。
 
     kind=eval 时不需要 target（代码里自带选择器）；其他 kind 必须给 target。
+
+    ✅ 用：**已经知道元素在哪**，只是要把它的内容拿出来
+❌ 别用：还不知道元素在哪→web_scan；抓重复结构的列表→web_extract；
+        要看结构/样式/祖先链→dom_inspect
     """
     kind, err = _merge_action(action, kind, allowed=('text', 'value', 'attr', 'html', 'list', 'children', 'siblings', 'eval'), default='text')
     if err:
@@ -434,6 +438,10 @@ async def web_check(
     - `kind="page_ready"`：页面加载完成了吗
 
     要"等它出现"请用 `web_wait`；要"判断现在有没有"用这个。
+
+    ✅ 用：**现在这一刻**，元素在不在（exists）/ 可见不可见（visible）/ 页面加载完没
+❌ 别用：要等它出现→web_wait；验证 @el: 元素库条目→web_verify；
+        体检整个元素库→element_check
     """
     kind, err = _merge_action(action, kind, allowed=("exists", "visible", "page_ready"), default="exists")
     if err:
@@ -529,6 +537,9 @@ async def web_extract(
     例：web_extract(item="div.quote",
                      fields=[{"name":"quote","selector":"span.text"},
                              {"name":"author","selector":"small.author"}])
+
+    ✅ 用：页面有一批**结构相同**的条目（商品卡 / 表格行 / 搜索结果）
+❌ 别用：只取单个元素→web_read；不知道列表容器在哪→先 web_scan
     """
     return await _call(
         "web_extract",
@@ -548,6 +559,9 @@ async def read_failure(run_id: str = "", level: str = "summary") -> dict[str, An
     run_id 为空则读最近一次失败。
     level=summary 只返回概要（失败节点 + 页面 URL + 元素数量）；
     level=dom 额外返回当时的可交互元素和表单字段清单。
+
+    ✅ 用：流程跑挂了，**第一件事**看这个（页面现场 + 失败节点 + 报错）
+❌ 别用：看历史耗时趋势→run_status；看异步任务进度→flow_task
     """
     FAILURES_DIR.mkdir(parents=True, exist_ok=True)
     files = sorted(FAILURES_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
@@ -629,6 +643,9 @@ async def element_diagnose(key: str) -> dict[str, Any]:
 
     「命中 2 个」（歧义）和「命中 0 个」（不存在）的修法完全不同，
     这个工具能区分出来。
+
+    ✅ 用：修流程时问"为什么找不到 / 为什么点错了"，需要逐层命中数
+❌ 别用：只要知道成不成→element_check（更快）；只验选择器→web_verify
     """
     from elements.resolve import resolve_fingerprint
     from elements.store import ElementStore
@@ -770,6 +787,9 @@ async def dom_inspect(target: str, depth: int = 4) -> dict[str, Any]:
     找一个稳定的属性（data-* / id）用来重拾取。
 
     `target` 可以是 css 或 `@el:名字`。
+
+    ✅ 用：定位失败时排查"这元素到底长什么样"、找稳定属性用来重拾取
+❌ 别用：只是取内容→web_read；只判断在不在/可见不可见→web_check
     """
     page = getattr(_ctx, "page", None)
     if page is None:
@@ -905,6 +925,9 @@ async def call_node(name: str, args: dict | None = None) -> dict[str, Any]:
         call_node("web_scan", {"kind": "interactive", "limit": 50})
 
     args 就是节点的原生参数（和流程 JSON 里 args 字段一致）。
+
+    ✅ 用：需要的能力**没封装成工具**（122 个节点里 MCP 只包了 49 个）
+❌ 别用：要跑一串操作→写流程用 flow_run
     """
     from engine.registry import registry
 
@@ -941,6 +964,9 @@ async def web_fields(max_label: int = 16, include_empty: bool = True) -> dict[st
     全部找出来，不用一个个猜 CSS、也不用写 JS。
 
     返回 [{label, tag, type, value, ph, required, xy, w}]。
+
+    ✅ 用：填表前先看有哪些字段（尤其 placeholder 全是"请选择"的页面）
+❌ 别用：要看按钮/链接→web_scan；要看页面文本→web_snapshot
     """
     return await _call(
         "web_fields",
@@ -954,6 +980,9 @@ async def web_snapshot(kind: Literal["structure", "text"] = "structure", limit: 
 
     kind=structure 返回可交互元素 + 表单字段的混合视图；
     kind=text 只返回文本块（适合读内容型页面）。
+
+    ✅ 用：要"先看懂这页在讲什么"（kind=text），或要元素+字段总览（kind=structure）
+❌ 别用：只想知道能点什么→web_scan；只看表单→web_fields
     """
     return await _call("web_snapshot", {"kind": kind, "limit": min(int(limit or 200), 500)})
 
@@ -963,6 +992,9 @@ async def web_verify(target: str, limit_ms: int = 5000) -> dict[str, Any]:
     """验证一个选择器 / `@el:名字` 现在还能不能定位，返回命中的层和元素信息。
 
     写流程前先验一下，比跑完整流程失败再回头查快得多。
+
+    ✅ 用：写流程前快速确认"这个目标现在还找得到吗"（一次一个）
+❌ 别用：要判断元素状态→web_check；要弄清**为什么**找不到/为什么降级→element_diagnose
     """
     return await _call("web_verify", {"target": target, "limit_ms": limit_ms})
 
@@ -976,6 +1008,10 @@ async def web_scan(
 
     典型用法：进了一个陌生页面，先 web_scan 看一眼有哪些可点的，再决定 element_pick 哪个。
     比猜 CSS 选择器靠谱得多。
+
+    ✅ 用：第一次进陌生页面，想知道"能点什么"
+❌ 别用：要看表单字段→web_fields；要看区块+文本→web_snapshot；
+        已知元素只取内容→web_read；抓重复结构的列表→web_extract
     """
     return await _call("web_scan", {"kind": kind, "limit": min(int(limit or 100), 300)})
 
@@ -1051,6 +1087,9 @@ async def element_check(keys: list[str] | None = None) -> dict[str, Any]:
 
     返回每条的 {key, ok, layer, tried}：
       layer=role+name 最好（语义没变）；path / sibling / geometry 说明已经在退化。
+
+    ✅ 用：页面改版后**一把查出**哪些元素坏了（返回 layer 能看出退化程度）
+❌ 别用：只验一个任意选择器→web_verify；要知道为什么降级/有没有歧义→element_diagnose
     """
     page = getattr(_ctx, "page", None)
     if page is None:
@@ -1126,6 +1165,9 @@ async def web_capture(
     """截图 / 下载文件 / 保存图片。
 
     name：文件名（不给就按秒自动命名 —— 同一秒两次会互相覆盖，建议给）
+
+    ✅ 用：截图存档、下载页面上的普通文件/图片
+❌ 别用：下载视频/音频/m3u8→media_dl
     """
     kind, err = _merge_action(action, kind, allowed=("shot", "download", "image"), default="shot")
     if err:
@@ -1204,7 +1246,11 @@ async def media_dl(
     path: str = "",
     quality: str = "best",
 ) -> dict[str, Any]:
-    """下载：视频 / 音频 / 播放列表 / 只取元数据 / 加密流(m3u8)。"""
+    """下载：视频 / 音频 / 播放列表 / 只取元数据 / 加密流(m3u8)。
+
+    ✅ 用：媒体资源下载（尤其 m3u8 需要解密合并）
+❌ 别用：页面普通文件/图片/截图→web_capture
+    """
     if path:
         path, err = _safe_path(path)
         if err:
@@ -1554,7 +1600,11 @@ async def flow_run(
     start_at: str = "",
     limit_steps: int = 10000,
 ) -> dict[str, Any]:
-    """跑一个流程。vars 的键直接注入成流程变量。"""
+    """跑一个流程。vars 的键直接注入成流程变量。
+
+    ✅ 用：**写完试跑验证**（几秒到几十秒的流程，要立刻看结果）
+❌ 别用：流程很长（>60s）→flow_run_async；只调单个节点→call_node
+    """
     flow, err = _safe_flow(flow)
     if err:
         return err
@@ -1715,6 +1765,9 @@ async def flow_run_async(
 
     **有队列**：浏览器是独占资源，同时跑两个流程会抢同一个页面。
     所以任务按提交顺序**串行执行**（concurrency=1），返回里有 queue_position。
+
+    ✅ 用：长流程，或一次提交多个（自动排队串行，不会抢页面）
+❌ 别用：想立刻拿到结果→flow_run
     """
     q = _ensure_queue()
     name, err = _safe_flow(flow)
@@ -1733,19 +1786,26 @@ async def flow_task(task_id: str, full: bool = True) -> dict[str, Any]:
 
     状态：queued（排队中）/ running（执行中）/ done / failed / cancelled
     full=True 时带上完整的节点执行明细。
+
+    ✅ 用：**手里有 task_id**，查它的进度和结果
+❌ 别用：不知道 task_id→flow_tasks（列全部）；看同步执行历史→run_status
     """
     return _ensure_queue().get(task_id, full=full)
 
 
 @mcp.tool
 async def flow_tasks(limit: int = 20) -> dict[str, Any]:
-    """看队列概览：并发度、各状态计数、最近的若干个任务（含排队位置）。"""
+    """看队列概览：并发度、各状态计数、最近的若干个任务（含排队位置）。
+
+    ✅ 用：想知道"现在有哪些任务在排队 / 在跑"
+❌ 别用：查某个具体任务的结果→flow_task
+    """
     return _ensure_queue().list_recent(limit=min(int(limit or 20), 100))
 
 
 @mcp.tool
 async def flow_cancel(task_id: str) -> dict[str, Any]:
-    """取消**还在排队**的任务。已经开始执行的不行（浏览器正在用页面）。"""
+    """取消任务。排队中直接标记取消；执行中调 task.cancel()，流程在最近的 await 点停下。"""
     return _ensure_queue().cancel(task_id)
 
 
@@ -2010,7 +2070,11 @@ async def flow_move_node(
 
 @mcp.tool
 async def run_status(flow: str = "", limit: int = 10) -> dict[str, Any]:
-    """查最近执行记录 + 各节点的耗时趋势（调参依据）。"""
+    """查最近执行记录 + 各节点的耗时趋势（调参依据）。
+
+    ✅ 用：调参（哪个节点慢）、看历史成功率
+❌ 别用：看某次失败的具体现场→read_failure；看异步队列→flow_tasks
+    """
     try:
         from store.db import DB
 
