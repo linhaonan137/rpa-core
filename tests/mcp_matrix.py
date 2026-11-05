@@ -256,6 +256,33 @@ def cases() -> list[dict]:
         detail=True, note="闭环：拾取的条目能直接当 target 用"))
     A(C("element_drop", "①删掉", {"key": "_mx_title"}))
     A(C("element_drop", "②再删一次", {"key": "_mx_title"}, expect="fail"))
+
+    # ---------------- 看页面（只读）
+    A(C("web_scan", "①交互元素", {"kind": "interactive", "limit": 10}, detail=True))
+    A(C("web_scan", "②全部元素", {"kind": "all", "limit": 10}))
+    A(C("web_snapshot", "①文本快照", {"limit": 30}, detail=True))
+    A(C("web_fields", "①表单字段", {}, note="quotes 页没有表单，应为空"))
+    A(C("web_extract", "①抓列表", {"item": "div.quote",
+        "fields": [{"name": "内容", "selector": "span.text"},
+                   {"name": "作者", "selector": "small.author"}]}, detail=True))
+    A(C("web_check", "①存在", {"target": "li.next a", "kind": "exists"}))
+    A(C("web_check", "②不存在", {"target": "#__nope__", "kind": "exists"}))
+    A(C("web_check", "③可见", {"target": "li.next a", "kind": "visible"}))
+    A(C("dom_inspect", "①看结构", {"target": "li.next a", "depth": 2}, detail=True))
+    A(C("dom_inspect", "①b 不存在", {"target": "#__nope__"}, expect="fail"))
+    A(C("web_dialog", "①无弹窗", {"kind": "accept", "wait_ms": 300}, expect="fail",
+        note="quotes 没有弹窗，应超时"))
+    A(C("web_switch", "①回主文档", {"kind": "main"}))
+    A(C("list_tabs", "①列标签页", {}, detail=True))
+
+    # ---------------- 录制（会真录一次，最后删掉生成的流程）
+    A(C("record_start", "①开始", {}))
+    A(C("record_status", "①录制中", {}))
+    A(C("web_click", "⑥录一个点击", {"target": "li.next a"}))
+    A(C("record_status", "②应到 2 步", {}, note="接管页 + 点击"))
+    A(C("record_stop", "①停止并保存", {"flow": "_mx_rec", "title": "矩阵录制"}, detail=True))
+    A(C("flow_read", "③读录出来的流程", {"flow": "_mx_rec"}))
+    A(C("flow_delete", "③删掉录的流程", {"flow": "_mx_rec"}))
     A(C("web_read", "④元素不存在", {"target": "不存在_的元素", "kind": "text", "limit_ms": 3000}, expect="fail"))
     A(C("web_wait", "①等 body 可见", {"target": "body", "state": "visible"}))
     A(C("web_wait", "②固定等待 ms", {"ms": 500}, expect="fail",
@@ -417,6 +444,9 @@ def cases() -> list[dict]:
     # ---------------- 删除（放最后，删掉 mx_test）
     A(C("flow_delete", "①删 mx_test", {"flow": "mx_test"}, detail=True))
     A(C("flow_delete", "②再删一次", {"flow": "mx_test"}, expect="fail"))
+
+    # ---------------- 失败现场（放最后：前面 flow_run mx_bad 已失败过）
+    A(C("read_failure", "①读最近失败", {"level": "summary"}, expect="any", detail=True))
     return out
 
 
