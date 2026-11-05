@@ -7,14 +7,16 @@
 ```
 CLI / EXE    rpa.exe run flows\xxx.json      <- 人 / 定时任务
 HTTP         POST /run/{name}                <- n8n / 其它系统
-MCP          49 个工具                       <- AI Agent
+MCP          工具层（见 docs/MCP-TOOLS.md）    <- AI Agent
                     |
-              引擎（DAG 调度 + 122 节点 + 元素库）
+              引擎（DAG 调度 + 节点 + 元素库）
                     |
               Playwright / 系统能力
 ```
 
 ## 能力
+
+> 各域节点数随版本变动，准确值以 `list_node_types` 为准；总量只在文末「规模」一节维护。
 
 | 域 | 节点 | 覆盖 |
 |---|---|---|
@@ -40,7 +42,7 @@ playwright install chrome chromium   # chromium 作为无系统 Chrome 时的回
 python main.py run flows/demo.json      # 跑流程
 python main.py serve --port 8100        # HTTP 服务（含异步队列）
 python main.py mcp                      # MCP 服务
-pytest tests -q                         # 579 项测试
+pytest tests -q                         # 全量测试
 ```
 
 打包单文件：
@@ -71,6 +73,21 @@ rpa.exe run flows\demo.json
 }
 ```
 
+### 顶层契约
+
+`extra="forbid"` —— **键名写错直接报错**，不会静默忽略。
+
+| 键 | 必填 | 说明 |
+|---|---|---|
+| `name` | ✓ | 流程名 |
+| `version` | — | 格式版本，默认 1 |
+| `nodes` | — | `id` / `type` / `args` / `label` / `off` / `on_fail` / `expect` / `budget_ms` |
+| `edges` | — | `id` / `from` / `to` / `exit`（`"true"` / `"false"` 表示条件分支出口，普通边留空）|
+| `vars` | — | 流程变量，节点参数里写 `{名}` 插值 |
+| `elements` | — | **流程内元素 manifest**，是全局元素库的覆盖层（见「元素库」节）|
+
+`_` 开头的键是元数据，引擎忽略（自愈痕迹写在这里）。
+
 参数化：节点里写 `{变量名}`，跑时 `--var keyword=平板` 覆盖。
 
 节点级可选项：
@@ -88,6 +105,8 @@ rpa.exe run flows\demo.json
 ```
 
 ## 元素库：六维指纹 + 逐层降级
+
+> ⚠️ **仓库不带元素库**：`elements.json` 在 `.gitignore` 里，首次使用需先 `element_pick` 拾取。任何"clone 下来直接跑"且写了 `@el:` 的流程都会定位失败，这是已知行为。
 
 不存单一 CSS 选择器（改版即废）。每个元素存六维身份，定位时按稳定性降级：
 
@@ -150,12 +169,40 @@ engine/          引擎（约 3,650 行）
 
 nodes/          122 个节点（12 个域）
 elements/       元素库（六维指纹 + 降级定位）
-api/            mcp.py（49 工具）/ http.py（10 路由）/ taskqueue 队列
+api/            mcp.py（工具层）/ http.py（HTTP 路由）/ taskqueue 队列
 heal/           失败分类 + 元素自愈候选
 store/          SQLite（执行记录 + 耗时趋势）
-flows/          示例流程（7 个，含真实站点）
-tests/          579 项
+flows/          示例流程（含真实站点）
+tests/          单元测试
 ```
+
+## 已定决策（别推翻）
+
+**引擎五条硬约束** —— 少一条都会退化成玩具：
+
+1. **图解析**：nodes / edges → 前驱后继表 + 起始节点 + 孤立节点告警
+2. **调度**：引用计数 join + 死路可达性重算（治分支汇合死锁 / 重复执行）
+3. **注册表**：`type → 函数`，重复注册启动即报错
+4. **postAssert**：动作成功 ≠ 事情成了
+5. **errorPolicy**：`retry-self` / `skip`（循环里逐行容错必用）
+
+**定位与数据**：
+
+| 决策 | 一句话理由 |
+|---|---|
+| 落盘 SQLite 优先，Excel 只在交付要格式时导出 | Excel 无真追加、并发写坏文件、104 万行上限 |
+| 元素库 = 全局库 + 流程内 `elements` manifest | 全局保证"改一处全生效"，manifest 保证流程能独立交付 |
+| 定位 ARIA 优先（role+name → attrs → path → 邻居 → 坐标）| 改版通常只改样式不改语义 |
+| 元素库不入库 | 含页面指纹与登录上下文，且干净 clone 应为空库 |
+
+**边界**：
+
+| 决策 | 一句话理由 |
+|---|---|
+| 桌面只留"表格批量抓取" | 其余桌面能力被 desktop-touch 全覆盖且更安全，不自建 |
+| 不做可视化画布 | JSON + Agent 生成足够，画布是纯成本 |
+| 自愈不走 MCP | 同进程直接调内核函数，绕协议是纯开销 |
+| 浏览器单实例串行 | 「哪个流程在哪个浏览器」答案唯一，管理问题自动消失 |
 
 ## 异步执行 + 队列
 
@@ -195,7 +242,7 @@ read_failure(level="dom")    # 带当时的 DOM 清单
 
 ## 示例流程
 
-`flows/` 里有 7 个可直接跑的示例：
+`flows/` 里有可直接跑的示例：
 
 | 文件 | 节点 | 演示什么 |
 |---|---|---|
@@ -214,13 +261,13 @@ python main.py run flows/real_1_quotes.json
 
 | 文档 | 内容 |
 |---|---|
-| [`docs/MCP-DESIGN.md`](docs/MCP-DESIGN.md) | 工具粒度设计 |
-| [`docs/MCP-TOOL-AUDIT.md`](docs/MCP-TOOL-AUDIT.md) | 工具审计（370 组实测 + 修掉的 53 个问题）|
-| [`docs/ELEMENT-CAPTURE.md`](docs/ELEMENT-CAPTURE.md) | 元素六维字段定义与抓取实现 |
-| [`docs/ELEMENT-LIB-FIX.md`](docs/ELEMENT-LIB-FIX.md) | 六维定位改造 |
-| [`docs/REAL-MOUSE.md`](docs/REAL-MOUSE.md) | 真实鼠标实现与三个坑 |
-| [`docs/REAL-SITE-TEST.md`](docs/REAL-SITE-TEST.md) | 真实站点验证记录 |
-| [`docs/LESSONS.md`](docs/LESSONS.md) | 踩坑清单 |
+| [`docs/MCP-TOOLS.md`](docs/MCP-TOOLS.md) | 工具层：粒度设计、参数约定、已知缺陷 |
+| [`docs/ELEMENT-LIB.md`](docs/ELEMENT-LIB.md) | 元素库：字段、采集、八层降级定位 |
+| [`docs/SELF-HEAL.md`](docs/SELF-HEAL.md) | 自愈五层、诊断表、变更记录、验证方式 |
+| [`docs/REAL-MOUSE.md`](docs/REAL-MOUSE.md) | 真实鼠标：实现与四个坑 |
+| [`docs/LESSONS.md`](docs/LESSONS.md) | 踩坑台账（按「再犯一次会疼多久」排序）|
+
+> 文档纪律：**会变的数字只在下方「规模」一节维护**，其余文档一律指向代码（`list_node_types` / `api/mcp.py`），避免同一事实在多处腐烂。
 
 ## 规模
 
@@ -228,6 +275,9 @@ python main.py run flows/real_1_quotes.json
 122 节点 · 49 MCP 工具 · 579 测试
 引擎 3,656 行 / 测试 6,223 行
 ```
+
+> **本节是全文唯一维护数字的地方。** 数字变化只更新这里；`docs/` 下不再重复任何会变的数字。
+> 核对口径：`list_node_types`（节点数）、`api/mcp.py` 中 `@mcp.tool` 计数（工具数）、`pytest --collect-only`（测试数）。
 
 ## License
 
