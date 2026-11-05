@@ -733,8 +733,16 @@ async def element_drop(
         else:
             missing.append(t)
     store.save()
+    # 没有 message 时上层包成空串，调用方看不到失败原因
+    if removed:
+        msg = f"删除 {len(removed)} 条"
+        if missing:
+            msg += f"；{len(missing)} 条不存在: {', '.join(missing[:5])}"
+    else:
+        msg = f"没有可删的：{', '.join(missing[:5])} 不在元素库里（现有 {len(store.keys())} 条）"
     return {
         "ok": bool(removed),
+        "message": msg,
         "removed": removed,
         "missing": missing,
         "remaining": len(store.keys()),
