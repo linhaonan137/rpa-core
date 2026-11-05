@@ -598,13 +598,14 @@ async def element_verify(
       · `element_verify(keys=["submit"], detail=True)` —— 查这个元素为什么降级、每层命中几个
 
     `write_stats=True` 才写 hits/misses（默认不写：被动验证不该污染统计）。
+    验一个不存在的目标最多等 2 秒 —— 定位失败就是失败，多等没用。
 
     ✅ 用：写流程前试一下 / 页面改版后体检 / 查为什么坏
     ❌ 别用：只想知道元素在不在、可不可见 → web_check（那是状态，不是定位）
     """
     # ── 模式 1：验任意选择器（不需要元素库）
     if target:
-        out = await _call("web_verify", {"target": target, "limit_ms": 5000})
+        out = await _call("web_verify", {"target": target, "limit_ms": 2000})
         if not out.get("ok"):
             return {"ok": False,
                     "error": out.get("error") or out.get("message"),
