@@ -226,8 +226,10 @@ def create_app(
                     "key": k,
                     "role": e.role,
                     "name": e.name,
-                    "hits": int((e.hints or {}).get("hits", 0) or 0),
-                    "stale": bool((e.meta or {}).get("stale")),
+                    # hits/misses 存在 meta 里（store.py 的 property），stale 是算出来的
+                    "hits": e.hits,
+                    "misses": e.misses,
+                    "stale": e.is_stale(),
                 })
             return {"ok": True, "count": len(items), "elements": items}
         except Exception as exc:  # noqa: BLE001

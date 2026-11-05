@@ -1,10 +1,10 @@
-"""MCP 服务：20 个工具，全是薄壳，内部转调节点与引擎。
+"""MCP 服务：工具层，全是薄壳，内部转调节点与引擎。
 
-设计原则（见 docs/AGENT-PLAN.md）：
+设计原则（见 docs/MCP-TOOLS.md）：
   · 一个工具 = 一个意图，内部用 kind/action 分流到多个节点
   · 参数只暴露「语义必需」的，调优类（limit_ms/attempts）有默认值
   · 工具返回里带 suggestion（超时建议），供第 2 轮调优用
-  · 不按节点镜像：93 个节点 → 20 个工具
+  · 不按节点镜像：工具数由「真实意图有几个」决定，不跟着节点数涨
 
 单实例：全局一个 ExecutionContext，串行执行（浏览器只开一只）。
 """
@@ -669,8 +669,14 @@ async def element_diagnose(key: str) -> dict[str, Any]:
 
     out: dict[str, Any] = {"ok": True, "key": key,
                            "entry": {k: v for k, v in entry.items() if v}}
+    # 元素在 iframe 里时先从主 frame 切进去（与 element_check / _locate 保持一致）
+    el_root: Any = page
+    for fsel in (e.fingerprint.frame or []):
+        f_sel = fsel.get("selector") if isinstance(fsel, dict) else str(fsel)
+        if f_sel:
+            el_root = el_root.frame_locator(f_sel)
     try:
-        loc, diag = await resolve_fingerprint(page, entry)
+        loc, diag = await resolve_fingerprint(el_root, entry, key=key)
     except Exception as exc:  # noqa: BLE001
         out["ok"] = False
         out["error"] = f"{type(exc).__name__}: {exc}"
@@ -954,16 +960,16 @@ async def web_fields(max_label: int = 16, include_empty: bool = True) -> dict[st
 
 
 @mcp.tool
-async def web_snapshot(kind: Literal["structure", "text"] = "structure", limit: int = 200) -> dict[str, Any]:
-    """页面快照：按视觉顺序列出页面上的区块和文本，用来「先看懂页面再动手」。
+async def web_snapshot(limit: int = 200) -> dict[str, Any]:
+    """页面文本快照：按视觉顺序列出页面上的文本块，用来「先看懂这页在讲什么」。
 
-    kind=structure 返回可交互元素 + 表单字段的混合视图；
-    kind=text 只返回文本块（适合读内容型页面）。
+    ✅ 用：读内容型页面，先理解整体结构再动手
+    ❌ 别用：想知道能点什么→web_scan；看表单字段→web_fields
 
-    ✅ 用：要"先看懂这页在讲什么"（kind=text），或要元素+字段总览（kind=structure）
-❌ 别用：只想知道能点什么→web_scan；只看表单→web_fields
+    原来的 kind=structure 模式已删除：它返回的就是 web_scan + web_fields 的并集
+    （同一个 JS 扫两遍），同一件事给三个入口只会让选错。
     """
-    return await _call("web_snapshot", {"kind": kind, "limit": min(int(limit or 200), 500)})
+    return await _call("web_snapshot", {"kind": "text", "limit": min(int(limit or 200), 500)})
 
 
 @mcp.tool
@@ -1365,7 +1371,11 @@ async def data_ops(
 
 @mcp.tool
 async def script_run(code: str = "", cmd: str = "", save_as: str = "", limit_ms: int = 60000) -> dict[str, Any]:
-    """逃生舱：跑 Python 代码或系统命令。覆盖所有没做成工具的能力。"""
+    """逃生舱：跑 Python 代码或系统命令。覆盖所有没做成工具的能力。
+
+    **等价于 `call_node(sys_py / sys_cmd)`**，只是参数名更顺手（code/cmd 而不是 args 字典）。
+    调单个节点优先用 `call_node`（结构化、不用拼字符串）；只有真要写一段代码时才用它。
+    """
     if cmd:
         # 节点读 timeout_ms（不是 limit_ms），实测传 limit_ms 超时完全失效
         return await _call("sys_cmd", {"cmd": cmd, "timeout_ms": limit_ms, "save_as": save_as})
@@ -1413,6 +1423,10 @@ async def ai_call(
 @mcp.tool
 async def notify(message: str, channel: Literal["webhook", "dingtalk", "wecom", "feishu"] = "webhook", url: str = "") -> dict[str, Any]:
     """发一条通知（一个 webhook POST 就够，不需要 17 个通道）。
+
+    **本质是 `net_http` 的 POST 语法糖**：拼好 body 后走同一个节点。
+    `channel` 只决定 body 结构（钉钉/企微/webhook 三种其实相同，只有飞书差一个字段），
+    所以别指望它能做到 net_http 做不到的事。
 
     url 必填（钉钉/企微/飞书的机器人 webhook 地址），channel 只决定 body 格式。
     """
@@ -1974,75 +1988,6 @@ async def flow_drop_node(
     _log_change(flow, node, {"op": "drop", "changes": changes}, reason, snap)
     return {"ok": True, "dropped": node, "changes": changes,
             "nodes": len(raw["nodes"]), "snapshot": snap}
-
-
-@mcp.tool
-async def flow_move_node(
-    flow: str,
-    node: str,
-    after: str,
-    reason: str = "",
-    dry_run: bool = True,
-) -> dict[str, Any]:
-    """**把节点挪到 after 后面**（自动重连，等价于先摘后插）。"""
-    flow, err = _safe_flow(flow)
-    if err:
-        return err
-    if not reason:
-        return {"ok": False, "error": "必须给 reason（写进审计流水）"}
-    if node == after:
-        return {"ok": False, "error": "node 和 after 是同一个节点"}
-
-    p = FLOW_DIR / f"{flow}.json"
-    if not p.exists():
-        return {"ok": False, "error": f"流程不存在: {flow}"}
-    raw = json.loads(p.read_text(encoding="utf-8"))
-    if _has_branch_edges(raw):
-        return {"ok": False, "error": "流程含分支/循环边，结构编辑不支持"}
-
-    nodes = raw.get("nodes") or []
-    ids = {str(n.get("id")) for n in nodes}
-    if node not in ids:
-        return {"ok": False, "error": f"节点不存在: {node}"}
-    if after not in ids:
-        return {"ok": False, "error": f"after 节点不存在: {after}"}
-
-    changes: list[str] = []
-    # 1) 摘下 node：前驱直连后继
-    preds = [e.get("from") for e in _plain_in(raw, node)]
-    succs = [e.get("to") for e in _plain_out(raw, node)]
-    raw["edges"] = [e for e in (raw.get("edges") or [])
-                    if e.get("from") != node and e.get("to") != node]
-    if preds and succs:
-        raw["edges"].append({"id": f"e-{preds[0]}-{succs[0]}", "from": preds[0], "to": succs[0]})
-        changes.append(f"摘下时重连 {preds[0]} → {succs[0]}")
-
-    # 2) 插到 after 后面
-    outs = [e for e in raw["edges"] if e.get("from") == after and not e.get("exit")]
-    if outs:
-        for e in outs:
-            tgt = e.get("to")
-            e["to"] = node
-            raw["edges"].append({"id": f"e-{node}-{tgt}", "from": node, "to": tgt})
-            changes.append(f"{after} → {tgt} 改为 {after} → {node} → {tgt}")
-    else:
-        raw["edges"].append({"id": f"e-{after}-{node}", "from": after, "to": node})
-        changes.append(f"{after} → {node}")
-
-    try:
-        Flow(**raw)
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": f"改完结构校验失败，未落盘: {exc}"}
-
-    if dry_run:
-        return {"ok": True, "dry_run": True, "would_move": node, "after": after, "changes": changes}
-
-    snap = _snapshot(p, raw)
-    tmp = p.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(p)
-    _log_change(flow, node, {"op": "move", "after": after, "changes": changes}, reason, snap)
-    return {"ok": True, "moved": node, "after": after, "changes": changes, "snapshot": snap}
 
 
 @mcp.tool
