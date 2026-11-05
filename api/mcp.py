@@ -1793,6 +1793,7 @@ async def flow_add_node(
 
     `after=""` → 插到流程最前面（成为新的起始节点）。
     `node_id` 不给就自动取一个没占用的 n<N>。
+    `reason` 必填，**dry_run 时也要** —— 先想清楚为什么改再动手。`dry_run` 默认 True。
     """
     flow, err = _safe_flow(flow)
     if err:

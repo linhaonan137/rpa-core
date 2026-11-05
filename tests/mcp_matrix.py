@@ -370,6 +370,41 @@ def cases() -> list[dict]:
     A(C("run_status", "②limit=5", {"limit": 5}, detail=True))
     A(C("run_status", "③limit=0", {"limit": 0}, expect="any", detail=True))
     A(C("run_status", "④limit=-1", {"limit": -1}, expect="any", detail=True))
+
+    # ---------------- 结构编辑（第一批补充）
+    A(C("flow_add_node", "①dry_run 看插入", {"flow": "mx_test", "after": "n1",
+        "type": "set_var", "args": {"name": "z", "value": 3},
+        "reason": "矩阵预演", "dry_run": True}, detail=True))
+    A(C("flow_add_node", "②缺 reason", {"flow": "mx_test", "after": "n1",
+        "type": "set_var", "args": {}}, expect="fail"))
+    A(C("flow_add_node", "③真插入", {"flow": "mx_test", "after": "n1",
+        "type": "set_var", "args": {"name": "z", "value": 3},
+        "reason": "矩阵插入", "dry_run": False}, detail=True))
+    A(C("flow_drop_node", "①删刚插入的 n2", {"flow": "mx_test", "node": "n2",
+        "reason": "矩阵删除", "dry_run": False}, detail=True))
+    A(C("flow_rollback", "①回滚上一版", {"flow": "mx_test"}, detail=True))
+    A(C("flow_rollback", "②快照不存在", {"flow": "mx_test",
+        "snapshot": "__nope__.snap-9999.json"}, expect="fail"))
+    A(C("flow_rollback", "③dry_run", {"flow": "mx_test", "dry_run": True}, detail=True))
+
+    # ---------------- 异步队列
+    A(C("flow_run_async", "①提交 mx_test", {"flow": "mx_test"}, detail=True))
+    A(C("flow_tasks", "①队列概览", {}, detail=True))
+    A(C("flow_task", "①不存在的 id", {"task_id": "__nope__"}, expect="fail"))
+    A(C("flow_cancel", "①不存在的 id", {"task_id": "__nope__"}, expect="fail"))
+
+    # ---------------- 节点直调 / 元信息
+    A(C("call_node", "①调 set_var", {"name": "set_var",
+        "args": {"name": "k", "value": 1}}, detail=True))
+    A(C("call_node", "①b 不存在的节点", {"name": "__nope__", "args": {}}, expect="fail"))
+    A(C("list_node_types", "①全部", {}, detail=True))
+    A(C("list_node_types", "①b 关键词 csv", {"keyword": "csv"}, detail=True))
+    A(C("inspect_node", "①查 web_open", {"node_type": "web_open"}, detail=True))
+    A(C("inspect_node", "①b 不存在", {"node_type": "__nope__"}, expect="fail"))
+
+    # ---------------- 删除（放最后，删掉 mx_test）
+    A(C("flow_delete", "①删 mx_test", {"flow": "mx_test"}, detail=True))
+    A(C("flow_delete", "②再删一次", {"flow": "mx_test"}, expect="fail"))
     return out
 
 

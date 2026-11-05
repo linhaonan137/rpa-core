@@ -1,0 +1,82 @@
+{
+  "name": "豆瓣电影 Top250 抓取",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "web_open",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "url": "{url}",
+        "until": "dom"
+      },
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n2",
+      "type": "web_extract",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "item": "div.item",
+        "fields": [
+          {
+            "name": "片名",
+            "selector": "span.title"
+          },
+          {
+            "name": "评分",
+            "selector": "span.rating_num"
+          },
+          {
+            "name": "链接",
+            "selector": "a",
+            "attr": "href"
+          }
+        ],
+        "save_as": "rows"
+      },
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n3",
+      "type": "data_sheet_write",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "path": "out/douban_top250.xlsx",
+        "rows": "{rows}"
+      },
+      "off": false,
+      "budget_ms": 0
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "id": "e2",
+      "from": "n2",
+      "to": "n3"
+    }
+  ],
+  "vars": [
+    {
+      "name": "url",
+      "value": "https://movie.douban.com/top250"
+    }
+  ],
+  "elements": {}
+}

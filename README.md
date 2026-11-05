@@ -61,9 +61,10 @@ rpa.exe run flows\demo.json
     {"id": "n1", "type": "web_open", "args": {"url": "https://example.com", "until": "dom"}},
     {"id": "n2", "type": "web_extract", "args": {
       "item": "div.item",
-      "fields": [{"name": "标题", "selector": "h3"}, {"name": "价格", "selector": ".price"}]
+      "fields": [{"name": "标题", "selector": "h3"}, {"name": "价格", "selector": ".price"}],
+      "save_as": "rows"
     }},
-    {"id": "n3", "type": "data_sheet_write", "args": {"path": "out/result.xlsx", "rows": "{n2}"}}
+    {"id": "n3", "type": "data_sheet_write", "args": {"path": "out/result.xlsx", "rows": "{rows}"}}
   ],
   "edges": [
     {"id": "e1", "from": "n1", "to": "n2"},
@@ -72,6 +73,9 @@ rpa.exe run flows\demo.json
   "vars": [{"name": "keyword", "value": "手机"}]
 }
 ```
+
+⚠️ **节点输出必须用 `save_as` 显式存成变量**，再用 `{变量名}` 引用。
+`{n2}`（拿节点 id 当变量名）**不是合法引用** —— 引擎不会自动把节点输出注册成同名变量，写了会报"变量未定义"。
 
 ### 顶层契约
 
