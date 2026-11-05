@@ -287,6 +287,21 @@ python main.py run flows/real_1_quotes.json
 > **本节是全文唯一维护数字的地方。** 数字变化只更新这里；`docs/` 下不再重复任何会变的数字。
 > 核对口径：`list_node_types`（节点数）、`api/mcp.py` 中 `@mcp.tool` 计数（工具数）、`pytest --collect-only`（测试数）。
 
+## 验证状态
+
+| 层 | 覆盖什么 | 怎么重跑 |
+|---|---|---|
+| 单元测试 | 引擎 / 节点 / 元素库 / 自愈 / 存储 | `python -m pytest tests -q` |
+| MCP 工具矩阵 | **全部工具**，每个都有「正常 / 边界 / 应报错」三类用例 | `python tests/mcp_matrix.py` |
+| HTTP 端点 | 全部路由（TestClient，不起服务） | `pytest tests/test_misc.py` |
+| 真实站点 | 豆瓣首页、豆瓣电影 Top250（抓 25 部落 Excel，换 `vars.url` 跑第 2 页） | `python main.py run flows/douban_top250.json` |
+
+矩阵判定只有三种：`PASS`（该成功）、`EXP-FAIL`（该报错）、`INFO`（信息性）。
+**出现 `UNEXPECTED-OK` / `UNEXPECTED-FAIL` 就是回归**，别当成"差不多"。
+
+> 未覆盖的场景：长流程（>60s）、高并发触发、需登录态的站点、强反爬站点。
+> 这些不是"应该没问题"，是**没验证过**。
+
 ## License
 
 MIT
