@@ -40,4 +40,8 @@ flows/_meta/
 flows/.versions/
 .env
 .env.*
+
+# ---- 过程产物（临时脚本/探测结果，用完即删，绝不入库）----
+_tmp/
+_tmp_*
 !env.example
