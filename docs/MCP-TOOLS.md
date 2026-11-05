@@ -78,7 +78,7 @@ Agent 只看得到 L1+L2。节点是实现细节，不注册成工具。
 
 | 组 | 代表工具 | 说明 |
 |---|---|---|
-| 网页与元素 | `web_open` / `web_click` / `web_wait` / `element_pick` / `element_check` | 页面操作 + 元素库闭环（拾取 → 用 → 体检）|
+| 网页与元素 | `web_open` / `web_click` / `web_wait` / `element_pick` / `element_verify` | 页面操作 + 元素库闭环（拾取 → 用 → 体检）|
 | 通用能力 | `file_ops` / `data_ops` / `script_run` / `ai_call` / `net_http` | 一工具带 `action` 分流 |
 | 流程 | `flow_read` / `flow_save` / `flow_patch` / `flow_rollback` / `flow_delete` / `flow_run` | 读、改、回滚、删、跑 |
 | 队列 | `flow_run_async` / `flow_task` / `flow_tasks` / `flow_cancel` | 长流程不阻塞调用方 |
@@ -197,23 +197,32 @@ net_http 直接打自己的服务
 | 看元素的真实结构（属性 / 祖先链 / 样式）| `dom_inspect` | web_read |
 | 立即查状态（存在 / 可见 / 页面就绪）| `web_check` | web_wait（那是等）|
 | 等某个条件成立 | `web_wait` | 固定 sleep |
-| 验证一个目标现在还能不能定位（任意选择器）| `web_verify` | element_check（那是批量的）|
-| 批量体检元素库 | `element_check` | element_diagnose（那是单条的）|
-| 单个元素逐层诊断（决定要不要重拾）| `element_diagnose` | element_check |
+| 验证定位（任意选择器 / 单个库条目 / 批量 / 全库）| `element_verify` | web_check（那是查状态）|
 
 ### 两个可见性口径，别混
 
 | 口径 | 谁用 | 判据 | 含义 |
 |---|---|---|---|
 | **可操作可见** | `web_check` / `web_visible` | Playwright `is_visible()` | 能不能点它（不排除 `opacity:0`）|
-| **视觉可见** | `web_verify` / `dom_inspect` | 有尺寸 + 非 `hidden` + 非 `opacity:0` | 人眼看得到吗 |
+| **视觉可见** | `element_verify` / `dom_inspect` | 有尺寸 + 非 `hidden` + 非 `opacity:0` | 人眼看得到吗 |
 
 同一个元素两个口径可能给不同答案。**判断"能不能操作"用前者，判断"用户是否看得到"用后者。**
 
-### 三个"验证"为什么不合并
+### 验证只有一个入口：`element_verify`
 
-`web_verify`（任意选择器，一对一）、`element_check`（库内 key，批量 + 写 hits/misses）、`element_diagnose`（单条逐层诊断）共享同一条 `resolve_fingerprint` 数据链，但服务三个不同动作：**写流程前试一下 / 定期体检 / 查为什么坏了**。
+三种用法共用一个工具，返回统一是 `results` 数组：
 
-合并会让其中一个变成带 4 个模式分支的怪物，比三个各司其职更难选对。同理 `web_check` 保留（它的 `page_ready` 分支别人没有）。
+| 用法 | 做什么 | 返回重点 |
+|---|---|---|
+| `element_verify(target=".btn")` | 验任意选择器能不能定位 | 单条：tag / text / visible / matched |
+| `element_verify()` | 体检整个元素库 | `degraded` 列表 = 需要重拾的元素 |
+| `element_verify(keys=["submit"], detail=True)` | 查这个元素为什么降级 | 逐层 `tried` + `ambiguous` |
 
-**代价**：Agent 需要靠上一张表选路。表比分支好维护。
+`write_stats=True` 才写 hits/misses（默认不写：被动验证不该污染统计）。
+
+**为什么这三个能合、"看页面"六个不能合**：
+
+- 这三个**参数同构**（要么 target 要么 keys，都配 detail）、**返回同构**（数组）、**同一意图**（验证定位）→ 合并后模型只需记 1 个工具
+- 那六个参数互斥（scan 不用 target、extract 要 item+fields、dom_inspect 要 depth），返回 5 种异构结构 → 合并后才真是"带 5 个模式分支的怪物"
+
+`web_check` 保留：它的 `page_ready` 分支别人没有，且语义是"查当前状态"而不是"验定位"。

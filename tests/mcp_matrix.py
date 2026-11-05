@@ -236,6 +236,14 @@ def cases() -> list[dict]:
         note="kind=eval 不需要 target"))
     A(C("web_read", "③b eval 补 target", {"kind": "eval", "target": "", "code": "() => 1+1"}, detail=True))
     A(C("web_read", "③c eval 裸表达式", {"kind": "eval", "target": "", "code": "1+1"}, detail=True))
+
+    # ---------------- element_verify（三种用法合一）
+    A(C("element_verify", "①验任意选择器", {"target": "li.next a"}))
+    A(C("element_verify", "②验不存在的选择器", {"target": "#__nope__"}, expect="fail"))
+    A(C("element_verify", "③全库体检（当前空库）", {}, note="空库返回 results:[] + hint"))
+    A(C("element_verify", "④库条目不存在", {"keys": ["__nope__"]},
+        note="整体 ok，失败项在 failed 列表"))
+    A(C("element_verify", "⑤detail 模式", {"target": "li.next a", "detail": True}))
     A(C("web_read", "④元素不存在", {"target": "不存在_的元素", "kind": "text", "limit_ms": 3000}, expect="fail"))
     A(C("web_wait", "①等 body 可见", {"target": "body", "state": "visible"}))
     A(C("web_wait", "②固定等待 ms", {"ms": 500}, expect="fail",

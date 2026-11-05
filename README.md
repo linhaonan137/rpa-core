@@ -126,7 +126,7 @@ rpa.exe run flows\demo.json
 ```python
 element_pick(role="link", text="提交订单", key="submit")   # 拾取
 web_click(target="@el:submit")                            # 使用
-element_check()                                           # 体检
+element_verify()                                          # 体检（不传参=全库）
 ```
 
 ## 录制
@@ -272,7 +272,7 @@ python main.py run flows/real_1_quotes.json
 ## 规模
 
 ```
-122 节点 · 50 MCP 工具 · 579 测试
+122 节点 · 48 MCP 工具 · 579 测试
 引擎 3,656 行 / 测试 6,223 行
 ```
 

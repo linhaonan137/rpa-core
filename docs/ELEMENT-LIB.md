@@ -106,10 +106,11 @@ hidden → null          其余 → textbox
 
 - 定位失败记一次 `miss`；**连续 3 次且 miss > hits → `is_stale`**，提示重拾。
 - 只记 miss 不记 hit——hit 在循环里高频触发，每次落盘不值得。
-- `element_check` 在当前页面逐个验证，报告"靠哪一层命中"。`degraded` 列表就是需要重拾的元素。
-- `element_list` 显示 key / role / name / hits / misses / stale。`element_diagnose` 给单个元素的定位详情。
+- `element_verify()` 在当前页面逐个验证，报告"靠哪一层命中"。`degraded` 列表就是需要重拾的元素。
+- `element_verify(keys=["submit"], detail=True)` 给单个元素的逐层命中数——判断是"歧义"还是"不存在"。
+- `element_list` 显示 key / role / name / hits / misses / stale，不碰页面。
 
-**这是判断"元素库还准不准"的最直接手段**：页面改版后跑一次 `element_check` 就知道哪些坏了，不用等流程跑挂。
+**这是判断"元素库还准不准"的最直接手段**：页面改版后跑一次 `element_verify()` 就知道哪些坏了，不用等流程跑挂。
 
 ## 5. Agent 侧的完整链路
 
@@ -117,7 +118,7 @@ hidden → null          其余 → textbox
 web_scan        看页面上有哪些可点元素（含 iframe，已去重、已过滤不可见）
 element_pick    一次调用拾取（text= 不用写 CSS，自动带 frame 链）
 web_click       用 @el:key 操作（八层降级定位）
-element_check   定期体检，看哪些退化了
+element_verify  定期体检（不传参=全库），看哪些退化了
 ```
 
 `element_pick(text="Next", key="next")` 会先试属性组（placeholder / aria-label / title / name），再退回 `text=`——输入框这类元素没有可见文本，只有 placeholder。

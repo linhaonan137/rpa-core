@@ -439,7 +439,7 @@ async def web_check(
 - `kind="page_ready"`：页面加载完成了吗
 
 ✅ 用：要立即知道当前状态（不要等）
-❌ 别用：要等它出现→web_wait；验证 @el: 元素库条目→web_verify；体检整个元素库→element_check
+❌ 别用：要等它出现→web_wait；要验证定位（任意选择器 / 库条目）→element_verify
     """
     kind, err = _merge_action(action, kind, allowed=("exists", "visible", "page_ready"), default="exists")
     if err:
@@ -584,6 +584,118 @@ async def read_failure(run_id: str = "", level: str = "summary") -> dict[str, An
 
 
 @mcp.tool
+async def element_verify(
+    target: str = "",
+    keys: list[str] | None = None,
+    detail: bool = False,
+    write_stats: bool = False,
+) -> dict[str, Any]:
+    """验证定位：任意选择器，或元素库条目（单个 / 批量 / 全库）。返回统一是 `results` 数组。
+
+    三种用法：
+      · `element_verify(target=".btn")` —— 写流程前确认"这个目标还找得到吗"
+      · `element_verify()` —— 体检整个元素库，看哪些退化了
+      · `element_verify(keys=["submit"], detail=True)` —— 查这个元素为什么降级、每层命中几个
+
+    `write_stats=True` 才写 hits/misses（默认不写：被动验证不该污染统计）。
+
+    ✅ 用：写流程前试一下 / 页面改版后体检 / 查为什么坏
+    ❌ 别用：只想知道元素在不在、可不可见 → web_check（那是状态，不是定位）
+    """
+    # ── 模式 1：验任意选择器（不需要元素库）
+    if target:
+        out = await _call("web_verify", {"target": target, "limit_ms": 5000})
+        if not out.get("ok"):
+            return {"ok": False,
+                    "error": out.get("error") or out.get("message"),
+                    "results": [{"name": target, "ok": False}]}
+        d = out.get("data") or {}
+        return {"ok": True, "results": [{
+            "name": target, "ok": True, "layer": "locate",
+            "tag": d.get("tag"), "text": d.get("text"),
+            "visible": d.get("visible"), "matched": d.get("matched"),
+            "box": d.get("box"),
+        }]}
+
+    # ── 模式 2：库条目（单条 / 批量 / 全库）
+    page = getattr(_ctx, "page", None)
+    if page is None:
+        return {"ok": False, "error": "element_verify 需要先 web_open 打开页面"}
+
+    from elements.resolve import AmbiguousElement, resolve_fingerprint
+    from elements.store import ElementStore
+
+    store = ElementStore(str(ELEMENTS_PATH))
+    names = keys if keys else store.keys()
+    if not names:
+        return {"ok": True, "results": [], "hint": "元素库是空的，先用 element_pick 拾取"}
+
+    results: list[dict[str, Any]] = []
+    for k in names:
+        if not store.has(k):
+            results.append({"name": k, "ok": False, "error": "元素库里没有"})
+            continue
+        e = store.get(k)
+        entry = {
+            "role": e.role,
+            "name": e.name,
+            "css": e.css,
+            "attrs": e.fingerprint.attrs,
+            "path": e.fingerprint.path,
+            "siblings": e.fingerprint.siblings,
+            "geometry": {"x": e.fingerprint.geometry.x, "y": e.fingerprint.geometry.y},
+            "tag": e.fingerprint.tag,
+            "label": (e.hints or {}).get("label") or "",
+        }
+        # 元素在 iframe 里时先切进去（与 _locate 的处理保持一致）
+        el_root: Any = page
+        for fsel in (e.fingerprint.frame or []):
+            f_sel = fsel.get("selector") if isinstance(fsel, dict) else str(fsel)
+            if f_sel:
+                el_root = el_root.frame_locator(f_sel)
+        try:
+            loc, diag = await resolve_fingerprint(el_root, entry, key=k)
+        except AmbiguousElement as exc:
+            results.append({"name": k, "ok": False, "error": str(exc)})
+            continue
+        except Exception as exc:  # noqa: BLE001
+            results.append({"name": k, "ok": False, "error": f"{type(exc).__name__}: {exc}"})
+            continue
+
+        if loc is None:
+            if write_stats:
+                e.miss()
+            item: dict[str, Any] = {"name": k, "ok": False, "layer": None,
+                                    "error": "六维定位全部失败"}
+            if detail:
+                item["tried"] = (diag or {}).get("tried")
+            results.append(item)
+        else:
+            if write_stats:
+                e.hit()
+            item = {"name": k, "ok": True, "layer": (diag or {}).get("layer")}
+            if detail:
+                item["tried"] = (diag or {}).get("tried")
+                item["ambiguous"] = bool((diag or {}).get("ambiguous"))
+            results.append(item)
+
+    if write_stats:
+        store.save()
+
+    ok_n = sum(1 for r in results if r.get("ok"))
+    degraded = [r["name"] for r in results
+                if r.get("ok") and r.get("layer") not in ("role+name", "role+name(scored)", None)]
+    return {
+        "ok": True,
+        "checked": len(results),
+        "passed": ok_n,
+        "failed": [r["name"] for r in results if not r.get("ok")],
+        "degraded": degraded,
+        "results": results,
+    }
+
+
+@mcp.tool
 async def element_drop(
     key: str = "",
     keys: list[str] | None = None,
@@ -593,7 +705,7 @@ async def element_drop(
 
     - `key="xxx"`      删单个
     - `keys=["a","b"]` 批量删
-    - `stale_only=True` 删除所有连续失败过的（配合 element_check 用）
+    - `stale_only=True` 删除所有连续失败过的（配合 element_verify(write_stats=True) 用）
     """
     from elements.store import ElementStore
     from engine.paths import ELEMENTS_PATH
@@ -626,79 +738,6 @@ async def element_drop(
         "missing": missing,
         "remaining": len(store.keys()),
     }
-
-
-@mcp.tool
-async def element_diagnose(key: str) -> dict[str, Any]:
-    """**完整定位诊断**：六维逐层试了哪些、各命中几个、为什么失败/为什么降级。
-
-    和 `element_check` 的区别：check 只告诉你「成没成、走了哪层」，
-    diagnose 告诉你**每一层试了什么选择器、命中几个、有没有歧义** —— 修流程靠这个。
-
-    「命中 2 个」（歧义）和「命中 0 个」（不存在）的修法完全不同，
-    这个工具能区分出来。
-
-    ✅ 用：修流程时问"为什么找不到 / 为什么点错了"，需要逐层命中数
-❌ 别用：只要知道成不成→element_check（更快）；只验选择器→web_verify
-    """
-    from elements.resolve import resolve_fingerprint
-    from elements.store import ElementStore
-    from engine.paths import ELEMENTS_PATH
-
-    page = getattr(_ctx, "page", None)
-    if page is None:
-        return {"ok": False, "error": "还没连接浏览器，先 web_open"}
-
-    store = ElementStore(str(ELEMENTS_PATH))
-    if not store.has(key):
-        return {"ok": False, "error": f"元素库里没有 {key}",
-                "available": list(store.keys())[:20]}
-
-    e = store.get(key)
-    entry = {
-        "role": e.role,
-        "name": e.name,
-        "css": e.css,
-        "attrs": e.fingerprint.attrs,
-        "path": e.fingerprint.path,
-        "siblings": e.fingerprint.siblings,
-        "geometry": {"x": e.fingerprint.geometry.x, "y": e.fingerprint.geometry.y},
-        "tag": e.fingerprint.tag,
-        "label": (e.hints or {}).get("label") or "",
-    }
-
-    out: dict[str, Any] = {"ok": True, "key": key,
-                           "entry": {k: v for k, v in entry.items() if v}}
-    # 元素在 iframe 里时先从主 frame 切进去（与 element_check / _locate 保持一致）
-    el_root: Any = page
-    for fsel in (e.fingerprint.frame or []):
-        f_sel = fsel.get("selector") if isinstance(fsel, dict) else str(fsel)
-        if f_sel:
-            el_root = el_root.frame_locator(f_sel)
-    try:
-        loc, diag = await resolve_fingerprint(el_root, entry, key=key)
-    except Exception as exc:  # noqa: BLE001
-        out["ok"] = False
-        out["error"] = f"{type(exc).__name__}: {exc}"
-        return out
-
-    out["diag"] = _jsonable(diag) if diag else {}
-    if loc is None:
-        out["ok"] = False
-        out["verdict"] = "六维全部没命中 —— 元素可能已从页面消失，或页面结构大变"
-        out["suggest"] = "用 web_scan / web_fields 重新看页面，然后 element_pick 覆盖这个 key"
-        return out
-
-    # 命中之后：算清楚是不是歧义
-    tried = (diag or {}).get("tried") or []
-    counts = [t.get("count") for t in tried if isinstance(t.get("count"), int)]
-    out["verdict"] = (diag or {}).get("layer") or "?"
-    if (diag or {}).get("ambiguous"):
-        out["verdict"] = "命中多个且无法区分（歧义）—— 可能点错元素"
-        out["suggest"] = "加 hints（邻近文本）或换更精确的 target 重新拾取"
-    elif any(c and c > 1 for c in counts):
-        out["verdict"] = f"{out['verdict']}（曾命中多个，已用打分/可见性筛选）"
-    return out
 
 
 @mcp.tool
@@ -832,7 +871,7 @@ async def record_start(variables: dict | None = None) -> dict[str, Any]:
     `variables` 声明参数：`{"title":"商品A"}`，之后操作里写 `{{title}}`，
     执行时换成实际值，录进流程的是 `{title}` 模板 —— 生成的流程可反复跑不同数据。
 
-    只录写操作。scan / web_fields / element_check / web_verify 这类**探索工具不录**。
+    只录写操作。scan / web_fields / element_verify 这类**探索工具不录**。
     """
     from engine.recorder import recorder
 
@@ -973,18 +1012,6 @@ async def web_snapshot(limit: int = 200) -> dict[str, Any]:
 
 
 @mcp.tool
-async def web_verify(target: str, limit_ms: int = 5000) -> dict[str, Any]:
-    """验证一个选择器 / `@el:名字` 现在还能不能定位，返回命中的层和元素信息。
-
-    写流程前先验一下，比跑完整流程失败再回头查快得多。
-
-    ✅ 用：写流程前快速确认"这个目标现在还找得到吗"（一次一个）
-❌ 别用：要判断元素状态→web_check；要弄清**为什么**找不到/为什么降级→element_diagnose
-    """
-    return await _call("web_verify", {"target": target, "limit_ms": limit_ms})
-
-
-@mcp.tool
 async def web_scan(
     kind: Literal["interactive", "all"] = "interactive",
     limit: int = 100,
@@ -1058,81 +1085,6 @@ async def element_list() -> dict[str, Any]:
     `stale=True` 表示连续 3 次定位失败，建议重新拾取。
     """
     return await _call("web_pick_list", {})
-
-
-@mcp.tool
-async def element_check(keys: list[str] | None = None) -> dict[str, Any]:
-    """体检：在当前页面上逐个验证元素库条目还能不能定位，以及靠哪一层命中。
-
-    这是判断"元素库还准不准"的最直接方法 —— 页面改版后跑一次就知道哪些坏了。
-    keys 为空则检查全部。
-
-    返回每条的 {key, ok, layer, tried}：
-      layer=role+name 最好（语义没变）；path / sibling / geometry 说明已经在退化。
-
-    ✅ 用：页面改版后**一把查出**哪些元素坏了（返回 layer 能看出退化程度）
-❌ 别用：只验一个任意选择器→web_verify；要知道为什么降级/有没有歧义→element_diagnose
-    """
-    page = getattr(_ctx, "page", None)
-    if page is None:
-        return {"ok": False, "error": "element_check 需要先 web_open 打开页面"}
-
-    from elements.resolve import AmbiguousElement, resolve_fingerprint
-    from elements.store import ElementStore
-
-    store = ElementStore(str(ELEMENTS_PATH))
-    targets = keys or store.keys()
-    results: list[dict[str, Any]] = []
-    for k in targets:
-        if not store.has(k):
-            results.append({"key": k, "ok": False, "layer": None, "error": "元素库里没有"})
-            continue
-        e = store.get(k)
-        entry = {
-            "role": e.role,
-            "name": e.name,
-            "css": e.css,
-            "attrs": e.fingerprint.attrs,
-            "path": e.fingerprint.path,
-            "siblings": e.fingerprint.siblings,
-            "geometry": {"x": e.fingerprint.geometry.x, "y": e.fingerprint.geometry.y},
-            "tag": e.fingerprint.tag,
-            # 表单 label（"袖长类型"这类）——不带的话只能退化到 path 层
-            "label": (e.hints or {}).get("label") or "",
-        }
-        try:
-            # 元素在 iframe 里时，先从主 frame 切进去（和 _locate 的处理保持一致）
-            el_root: Any = page
-            for fsel in (e.fingerprint.frame or []):
-                f_sel = fsel.get("selector") if isinstance(fsel, dict) else str(fsel)
-                if f_sel:
-                    el_root = el_root.frame_locator(f_sel)
-            loc, diag = await resolve_fingerprint(el_root, entry, key=k)
-            if loc is None:
-                e.miss()
-                results.append({
-                    "key": k, "ok": False, "layer": None,
-                    "error": "六维定位全部失败", "tried": diag.get("tried"),
-                })
-            else:
-                e.hit()
-                results.append({"key": k, "ok": True, "layer": diag.get("layer"), "tried": diag.get("tried")})
-        except AmbiguousElement as exc:
-            results.append({"key": k, "ok": False, "layer": None, "error": str(exc)})
-        except Exception as exc:  # noqa: BLE001
-            results.append({"key": k, "ok": False, "layer": None, "error": f"{type(exc).__name__}: {exc}"})
-    store.save()
-
-    ok_n = sum(1 for r in results if r.get("ok"))
-    degraded = [r["key"] for r in results if r.get("ok") and r.get("layer") not in ("role+name", "role+name(scored)", None)]
-    return {
-        "ok": True,
-        "checked": len(results),
-        "passed": ok_n,
-        "failed": [r["key"] for r in results if not r.get("ok")],
-        "degraded": degraded,  # 靠降级层才命中的（页面已经变了，建议重拾）
-        "detail": results,
-    }
 
 
 @mcp.tool
