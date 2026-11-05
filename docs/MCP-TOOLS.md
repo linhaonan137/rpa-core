@@ -182,3 +182,38 @@ net_http 直接打自己的服务
 ```
 
 三条通路都在，就不需要为低频需求加工具。
+
+## 12. 看页面 / 验证类：按意图选工具
+
+工具多了最大的害处不是 token，是**选错**。下表按意图钉死，别再临时判断：
+
+| 意图 | 工具 | 不要用 |
+|---|---|---|
+| 第一次进页面，想知道能点什么 | `web_scan` | snapshot / fields |
+| 读内容型页面，先理解整体 | `web_snapshot` | read |
+| 表单字段（靠 label 区分无 id 的输入框）| `web_fields` | scan |
+| 已知元素在哪，要取内容 | `web_read` | dom_inspect |
+| 抓重复结构的列表 | `web_extract` | web_read(list) |
+| 看元素的真实结构（属性 / 祖先链 / 样式）| `dom_inspect` | web_read |
+| 立即查状态（存在 / 可见 / 页面就绪）| `web_check` | web_wait（那是等）|
+| 等某个条件成立 | `web_wait` | 固定 sleep |
+| 验证一个目标现在还能不能定位（任意选择器）| `web_verify` | element_check（那是批量的）|
+| 批量体检元素库 | `element_check` | element_diagnose（那是单条的）|
+| 单个元素逐层诊断（决定要不要重拾）| `element_diagnose` | element_check |
+
+### 两个可见性口径，别混
+
+| 口径 | 谁用 | 判据 | 含义 |
+|---|---|---|---|
+| **可操作可见** | `web_check` / `web_visible` | Playwright `is_visible()` | 能不能点它（不排除 `opacity:0`）|
+| **视觉可见** | `web_verify` / `dom_inspect` | 有尺寸 + 非 `hidden` + 非 `opacity:0` | 人眼看得到吗 |
+
+同一个元素两个口径可能给不同答案。**判断"能不能操作"用前者，判断"用户是否看得到"用后者。**
+
+### 三个"验证"为什么不合并
+
+`web_verify`（任意选择器，一对一）、`element_check`（库内 key，批量 + 写 hits/misses）、`element_diagnose`（单条逐层诊断）共享同一条 `resolve_fingerprint` 数据链，但服务三个不同动作：**写流程前试一下 / 定期体检 / 查为什么坏了**。
+
+合并会让其中一个变成带 4 个模式分支的怪物，比三个各司其职更难选对。同理 `web_check` 保留（它的 `page_ready` 分支别人没有）。
+
+**代价**：Agent 需要靠上一张表选路。表比分支好维护。

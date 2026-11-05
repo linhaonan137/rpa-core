@@ -1670,10 +1670,14 @@ async def web_verify(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         info = await el.evaluate(
             """e => {
                 const r = e.getBoundingClientRect();
+                const st = getComputedStyle(e);
                 return {
                   tag: e.tagName.toLowerCase(),
                   text: (e.innerText || e.value || "").trim().slice(0, 60),
-                  visible: e.offsetParent !== null,
+                  // 视觉可见口径（有尺寸 + 非 hidden + 非 opacity:0），与 dom_inspect 一致。
+                  // 注意 web_visible 用的是 Playwright is_visible()，那是「可操作」口径，两者不同。
+                  visible: r.width > 0 && r.height > 0 && st.visibility !== "hidden"
+                           && st.display !== "none" && st.opacity !== "0",
                   box: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)],
                 };
             }"""
@@ -1863,7 +1867,11 @@ async def web_has(args: dict[str, Any], ctx: ExecutionContext) -> Result:
 @register("web_visible")
 @_guard
 async def web_visible(args: dict[str, Any], ctx: ExecutionContext) -> Result:
-    """args: {target, hints, limit_ms, save_as} → data=bool"""
+    """args: {target, hints, limit_ms, save_as} → data=bool
+
+    口径：Playwright `is_visible()` —— **「可操作」可见**（有非空 box 且非 visibility:hidden），
+    不排除 opacity:0。要看「人眼是否看得见」（含 opacity + display + 尺寸），用 web_verify 的 visible 字段。
+    """
     page = _page(ctx)
     target = _need(ctx, args, "target", "web_visible")
     limit = _ms(ctx, args, "limit_ms", DEFAULT_LIMIT_MS)

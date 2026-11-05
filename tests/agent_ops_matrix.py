@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from agent_ops_probe import MCP, ROOT  # noqa: E402
+from mcp_matrix import MCP, ROOT  # noqa: E402
 
 OUT = ROOT / "out"
 TRACE = OUT / "agent_ops_trace.jsonl"
