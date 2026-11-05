@@ -106,11 +106,21 @@ def _simplify_name(n: str) -> str:
     为什么需要：我们存的 name 是 innerText（`Next →`、`“It is our choices...”`），
     而 Playwright 的 get_by_role(name=...) 按 accname 规范算出来的是 `Next`
     （箭头和引号被规范化掉）—— 直接用原文匹配会 0 命中，白白降级到 path。
+
+    但**数字中间的点必须保留**：`9.7` 简化成 `9 7` 就再也匹配不上了
+    （实测豆瓣评分元素从 role 层直接掉到 path 层）。所以先把 `数字.数字`
+    整段切出来原样保留，只对剩下的部分去符号。
     """
     import re
 
-    s = re.sub(r"[^\w\u4e00-\u9fff]+", " ", str(n or ""))
-    return " ".join(s.split()).strip()
+    parts = re.split(r"(\d+(?:\.\d+)+)", str(n or ""))
+    out: list[str] = []
+    for i, p in enumerate(parts):
+        if i % 2 == 1:  # 被捕获的「数字.数字」，原样保留
+            out.append(p)
+        else:
+            out.append(re.sub(r"[^\w\u4e00-\u9fff]+", " ", p))
+    return " ".join("".join(out).split()).strip()
 
 
 async def _count(loc: Any) -> int:

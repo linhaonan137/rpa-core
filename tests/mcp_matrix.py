@@ -244,6 +244,18 @@ def cases() -> list[dict]:
     A(C("element_verify", "④库条目不存在", {"keys": ["__nope__"]},
         note="整体 ok，失败项在 failed 列表"))
     A(C("element_verify", "⑤detail 模式", {"target": "li.next a", "detail": True}))
+
+    # ---------------- 元素库闭环（拾取 → 列 → 验 → 用 → 删），自清理
+    A(C("element_pick", "①按文本拾取", {"text": "Quotes to Scrape", "key": "_mx_title"},
+        detail=True))
+    A(C("element_pick", "①b 缺 key", {"text": "Login"}, expect="fail"))
+    A(C("element_list", "①列出", {}, detail=True))
+    A(C("element_verify", "⑥验刚拾的", {"keys": ["_mx_title"], "detail": True},
+        note="应命中 role+name"))
+    A(C("web_read", "⑤用 @el: 取文本", {"target": "@el:_mx_title", "kind": "text"},
+        detail=True, note="闭环：拾取的条目能直接当 target 用"))
+    A(C("element_drop", "①删掉", {"key": "_mx_title"}))
+    A(C("element_drop", "②再删一次", {"key": "_mx_title"}, expect="fail"))
     A(C("web_read", "④元素不存在", {"target": "不存在_的元素", "kind": "text", "limit_ms": 3000}, expect="fail"))
     A(C("web_wait", "①等 body 可见", {"target": "body", "state": "visible"}))
     A(C("web_wait", "②固定等待 ms", {"ms": 500}, expect="fail",

@@ -51,13 +51,15 @@ async def web_pick(args: dict[str, Any], ctx: ExecutionContext) -> Result:
 
     path = _store_path(args)
     store = ElementStore(path)
+    matched = 0
     try:
         if role and name:
             # 精确优先（避免子串撞长文本），没有再放宽
             loc = ctx.page.get_by_role(role, name=name, exact=exact)
             if exact and await loc.count() == 0:
                 loc = ctx.page.get_by_role(role, name=name, exact=False)
-            if await loc.count() == 0:
+            matched = await loc.count()
+            if matched == 0:
                 return Result.fail(f"web_pick: 没有 {role}[name={name!r}] 的元素")
             entry = await capture(
                 ctx.page, None, str(key), store=store,
@@ -73,6 +75,10 @@ async def web_pick(args: dict[str, Any], ctx: ExecutionContext) -> Result:
                 int(args.get("limit_ms", 10_000)),
             )
             first = getattr(loc, "first", loc)
+            try:
+                matched = await loc.count()
+            except Exception:  # noqa: BLE001
+                matched = 0
             entry = await capture(
                 ctx.page,
                 None,
@@ -83,6 +89,10 @@ async def web_pick(args: dict[str, Any], ctx: ExecutionContext) -> Result:
                 locator=first,
             )
         else:
+            try:
+                matched = await ctx.page.locator(str(selector)).count()
+            except Exception:  # noqa: BLE001
+                matched = 0
             entry = await capture(
                 ctx.page,
                 str(selector),
@@ -101,9 +111,12 @@ async def web_pick(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     if isinstance(ctx.elements, dict):
         # 存**全量**（to_dict 带六维指纹），定位器才能用上 attrs/path/siblings/geometry
         ctx.elements[str(key)] = entry.to_dict()
+    # 匹配多个时只取第一个，必须显式告诉调用方 —— 否则拾错了也没人知道
+    hint = f"；⚠ 匹配 {matched} 个，已取第 1 个（要准就加限定）" if matched > 1 else ""
     return Result.done(
-        f"已拾取 @el:{key} → {where}（存 {path}）",
-        data={"key": key, "role": entry.role, "name": entry.name, "store": path},
+        f"已拾取 @el:{key} → {where}{hint}（存 {path}）",
+        data={"key": key, "role": entry.role, "name": entry.name,
+              "matched": matched, "store": path},
     )
 
 
