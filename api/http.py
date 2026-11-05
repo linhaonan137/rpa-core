@@ -1,9 +1,15 @@
-"""HTTP 入口：把流程发布成端点。
+"""HTTP 入口：把流程发布成端点（n8n / 其它编排器调这个，不走 MCP）。
 
-  POST /run/{name}     执行流程，body 的键直接注入成变量
-  GET  /flows          列出可用流程
-  GET  /runs           最近执行记录
-  GET  /health         健康检查
+  POST /run/{name}          同步执行，body 的键直接注入成变量
+  POST /run-async/{name}    异步提交，立刻返回 task_id
+  GET  /task/{task_id}      查异步任务（full=True 带节点明细）
+  GET  /tasks               队列概览
+  GET  /flows               列出可用流程
+  GET  /flow/{name}         读单个流程定义 + 上次执行
+  GET  /elements            元素库清单（hits / misses / stale）
+  GET  /runs                最近执行记录
+  GET  /trend               各节点耗时趋势（P95）
+  GET  /health              健康检查（唯一不校验 token 的）
 
 鉴权：环境变量 RPA_TOKEN 非空时，要求 `X-RPA-Token` 头或 `?token=` 一致。
 默认只绑 127.0.0.1（见 main.py 的启动参数）。
@@ -96,7 +102,7 @@ def create_app(
                 items.append({"name": p.stem, "title": raw.get("name"), "nodes": len(raw.get("nodes") or [])})
             except Exception:  # noqa: BLE001
                 items.append({"name": p.stem, "error": "解析失败"})
-        return {"flows": items}
+        return {"ok": True, "flows": items}
 
     @app.post("/run/{name}")
     async def run_flow(name: str, request: Request) -> JSONResponse:
@@ -189,13 +195,11 @@ def create_app(
         """读单个流程的完整定义（UI 用：显示节点、变量、上次结果）。"""
         _check(request)
         flow = _load(name)
+        # 用外层的 db（DB 没有 last_run 方法，原来 hasattr 判断恒为 False → 永远返回 null）
         last = None
         try:
-            from store.db import DB
-
-            db = DB(db_file)
-            last = db.last_run(flow.name) if hasattr(db, "last_run") else None
-            db.close()
+            rows = db.recent_runs(limit=1, flow=flow.name)
+            last = rows[0] if rows else None
         except Exception:  # noqa: BLE001
             last = None
         return {
@@ -238,12 +242,12 @@ def create_app(
     @app.get("/runs")
     async def recent_runs(request: Request, limit: int = 20) -> dict[str, Any]:
         _check(request)
-        return {"runs": db.recent_runs(limit=limit)}
+        return {"ok": True, "runs": db.recent_runs(limit=limit)}
 
     @app.get("/trend")
     async def trend(request: Request, flow: str | None = None) -> dict[str, Any]:
         _check(request)
-        return {"trend": db.trend(flow=flow)}
+        return {"ok": True, "trend": db.trend(flow=flow)}
 
     return app
 
