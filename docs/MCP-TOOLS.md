@@ -80,7 +80,7 @@ Agent 只看得到 L1+L2。节点是实现细节，不注册成工具。
 |---|---|---|
 | 网页与元素 | `web_open` / `web_click` / `web_wait` / `element_pick` / `element_check` | 页面操作 + 元素库闭环（拾取 → 用 → 体检）|
 | 通用能力 | `file_ops` / `data_ops` / `script_run` / `ai_call` / `net_http` | 一工具带 `action` 分流 |
-| 流程 | `flow_read` / `flow_save` / `flow_patch` / `flow_run` | 读、改、跑 |
+| 流程 | `flow_read` / `flow_save` / `flow_patch` / `flow_rollback` / `flow_delete` / `flow_run` | 读、改、回滚、删、跑 |
 | 队列 | `flow_run_async` / `flow_task` / `flow_tasks` / `flow_cancel` | 长流程不阻塞调用方 |
 | 观测 | `run_status` / `read_failure` / `record_*` | 实例状态、失败现场、录制 |
 
@@ -135,7 +135,11 @@ P95 > 超时 × 0.8      → 建议提高
 
 但必须做的事一条不能少：每次执行记录 `run_id → browser_id → cdp_url → profile`（出问题唯一能追溯的线）；执行结束清页面；异常退出标 dirty；失败快照带 `cdp_url`（Agent 能连上去看现场）。
 
-`run_status` 一工具两用：现在有几个浏览器、谁在占用；最近跑了什么。**它是"出问题时的唯一抓手"，不是一个功能**，所以值得占一个工具位。
+`run_status(flow, limit)` 查最近执行记录与各节点耗时趋势 —— **这是调参的唯一数据依据**，不是"看一眼状态"。它不报浏览器实例：单实例串行 + 队列已让"谁在用"答案唯一，要查占用看 HTTP 的 `/tasks`。
+
+**回滚是改流程的配套出口**：`flow_save` / `flow_patch` / `add_node` / `drop_node` / `move_node` 每次落盘前都写 `.versions/<flow>.snap-N.json`，`flow_rollback` 就是读回这些快照的唯一入口。没有它，快照是只写不读的磁盘垃圾，"改坏了回不去"。回滚本身也拍快照（`pre`），滚错了还能再滚回来。
+
+`flow_delete` 默认保留快照，所以删掉的流程可以用 `flow_rollback` 重建 —— 这也是为什么删除敢做成一个动作而不是"归档"。
 
 ## 9. 三类高危缺陷模式
 

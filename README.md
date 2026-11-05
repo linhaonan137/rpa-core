@@ -272,7 +272,7 @@ python main.py run flows/real_1_quotes.json
 ## 规模
 
 ```
-122 节点 · 49 MCP 工具 · 579 测试
+122 节点 · 51 MCP 工具 · 579 测试
 引擎 3,656 行 / 测试 6,223 行
 ```
 

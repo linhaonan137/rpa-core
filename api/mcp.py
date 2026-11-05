@@ -2046,6 +2046,89 @@ async def flow_move_node(
 
 
 @mcp.tool
+async def flow_rollback(flow: str, snapshot: str = "", dry_run: bool = False) -> dict[str, Any]:
+    """把流程恢复到某个改前快照；不填 snapshot 就用最近一个。
+
+    ✅ 用：flow_save / flow_patch 改坏了要撤回
+    ❌ 别用：想改参数→flow_patch；想新建→flow_save
+    """
+    flow, err = _safe_flow(flow)
+    if err:
+        return err
+    p = FLOW_DIR / f"{flow}.json"
+    d = p.parent / VERSIONS_DIR_NAME
+    snaps = sorted(d.glob(f"{p.stem}.snap-*.json")) if d.exists() else []
+    if not snaps:
+        return {"ok": False, "error": f"没有快照: {flow}", "hint": "只有改过流程（save/patch/add/drop/move）才会有"}
+    names = [s.name for s in snaps]
+    if snapshot:
+        f = d / snapshot
+        if not f.exists():
+            return {"ok": False, "error": f"快照不存在: {snapshot}", "available": names}
+    else:
+        f = snaps[-1]
+
+    try:
+        raw = json.loads(f.read_text(encoding="utf-8"))
+        Flow(**raw)  # 快照可能来自旧 schema，先校验再落盘
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"快照内容不合法，未回滚: {exc}"}
+
+    if dry_run:
+        return {"ok": True, "dry_run": True, "would_restore": f.name,
+                "nodes": len(raw.get("nodes") or []), "available": names}
+
+    # 回滚本身也拍快照：滚错了还能滚回来（否则二次伤害无解）
+    pre = ""
+    if p.exists():
+        try:
+            pre = _snapshot(p, json.loads(p.read_text(encoding="utf-8")))
+        except Exception:  # noqa: BLE001
+            pre = ""
+
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
+    _log_change(flow, "", {"op": "rollback", "from": f.name, "pre": pre}, "rollback", pre)
+    return {"ok": True, "restored": f.name, "nodes": len(raw.get("nodes") or []),
+            "snapshot": pre, "available": names}
+
+
+@mcp.tool
+async def flow_delete(flow: str, purge_snapshots: bool = False) -> dict[str, Any]:
+    """删除一个流程文件；默认保留它的快照，删错还能 flow_rollback 找回。
+
+    ✅ 用：清掉试错建出来的废流程（否则 flow_read 列表越拖越长）
+    ❌ 别用：只想停用某步→flow_patch 设 off=true
+    """
+    flow, err = _safe_flow(flow)
+    if err:
+        return err
+    p = FLOW_DIR / f"{flow}.json"
+    if not p.exists():
+        return {"ok": False, "error": f"流程不存在: {flow}"}
+
+    snap = ""
+    try:
+        snap = _snapshot(p, json.loads(p.read_text(encoding="utf-8")))
+    except Exception:  # noqa: BLE001 - 文件坏了也要能删掉
+        snap = ""
+
+    p.unlink()
+    removed = 0
+    if purge_snapshots:
+        d = p.parent / VERSIONS_DIR_NAME
+        for s in d.glob(f"{p.stem}.snap-*.json"):
+            try:
+                s.unlink()
+                removed += 1
+            except Exception:  # noqa: BLE001
+                pass
+    return {"ok": True, "deleted": flow, "snapshot": snap,
+            "purged_snapshots": removed, "hint": "需要时可用 flow_rollback 找回"}
+
+
+@mcp.tool
 async def run_status(flow: str = "", limit: int = 10) -> dict[str, Any]:
     """查最近执行记录 + 各节点的耗时趋势（调参依据）。
 
