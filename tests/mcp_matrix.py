@@ -233,7 +233,7 @@ def cases() -> list[dict]:
     A(C("web_read", "①文本 div.quote", {"target": "div.quote", "kind": "text"}, detail=True))
     A(C("web_read", "②list div.quote", {"kind": "list", "target": "div.quote"}, detail=True))
     A(C("web_read", "③eval 箭头函数", {"kind": "eval", "code": "() => 1+1"},
-        expect="fail", note="target 必填，eval 无法只传 code"))
+        note="kind=eval 不需要 target"))
     A(C("web_read", "③b eval 补 target", {"kind": "eval", "target": "", "code": "() => 1+1"}, detail=True))
     A(C("web_read", "③c eval 裸表达式", {"kind": "eval", "target": "", "code": "1+1"}, detail=True))
     A(C("web_read", "④元素不存在", {"target": "不存在_的元素", "kind": "text", "limit_ms": 3000}, expect="fail"))
@@ -244,21 +244,21 @@ def cases() -> list[dict]:
     A(C("web_wait", "⑤when=text", {"target": "The world", "when": "text", "limit_ms": 3000}))
     A(C("web_wait", "⑥when=url 错误地址", {"target": "https://example.com/", "when": "url", "limit_ms": 3000},
         expect="fail", note="URL 不匹配应超时；秒回 ok 说明 url 没参与判断"))
-    A(C("web_capture", "①截图到文件", {"kind": "web_shot", "path": "out/mx_shot.png"},
+    A(C("web_capture", "①截图到文件", {"kind": "shot", "path": "out/mx_shot.png"},
         artifact="out/mx_shot.png", detail=True))
-    A(C("web_capture", "②目录 + name", {"kind": "web_shot", "path": "out", "name": "mx2.png"},
-        expect="fail", note="name 不在 schema"))
-    A(C("web_capture", "②b 目录自动命名", {"kind": "web_shot", "path": "out"}, detail=True))
-    A(C("web_capture", "③整页截图", {"kind": "web_shot", "full_page": True},
+    A(C("web_capture", "②目录 + name", {"kind": "shot", "path": "out", "name": "mx2.png"},
+        note="name 已进 schema，可指定文件名"))
+    A(C("web_capture", "②b 目录自动命名", {"kind": "shot", "path": "out"}, detail=True))
+    A(C("web_capture", "③整页截图", {"kind": "shot", "full_page": True},
         artifact="@data", detail=True))
     A(C("web_click", "①点下一页", {"target": "li.next a"}, detail=True))
     A(C("web_click", "②元素库不存在", {"target": "@el:不存在"}, expect="fail"))
     A(C("web_click", "③悬停(action 参数)", {"target": "li.next a", "action": "hover"},
-        expect="fail", note="实际参数叫 kind"))
+        note="alias 生效：action 与 kind 等价"))
     A(C("web_open", "③回退", {"kind": "back"}))
     A(C("web_click", "③b 悬停(kind)", {"target": "li.next a", "kind": "hover"}))
-    A(C("web_open", "②复用 reuse", {"kind": "reuse"}, expect="fail",
-        note="kind=reuse 未实现，落到 web_open 缺 url"))
+    A(C("web_open", "②复用 reuse", {"kind": "reuse"},
+        note="复用当前页"))
     A(C("web_open", "③刷新", {"kind": "refresh"}))
     A(C("web_open", "⑤空 url", {"url": "", "kind": "new"}, expect="fail"))
     A(C("web_open", "④关闭", {"kind": "close"}))
@@ -282,18 +282,19 @@ def cases() -> list[dict]:
     A(C("web_network", "③stop 取记录", {"action": "stop"}, detail=True))
     A(C("web_network", "③b log(旧枚举)", {"action": "log"}, expect="fail",
         note="schema 只有 start/wait/stop"))
-    A(C("web_capture", "整页截图(表单页)", {"kind": "web_shot", "full_page": True},
+    A(C("web_capture", "整页截图(表单页)", {"kind": "shot", "full_page": True},
         artifact="@data", detail=True))
 
     # ---------------- 桌面 / 媒体 / AI（预期缺库）
     A(C("desktop_act", "①抓表格", {"kind": "table"}, expect="fail", detail=True))
-    A(C("desktop_act", "②读焦点控件", {"kind": "focused"}, expect="fail"))
+    A(C("desktop_act", "②读焦点控件", {"kind": "focused"}))
     A(C("media_dl", "①下载视频", {"url": "https://example.com/v.mp4"}, expect="fail", detail=True))
     A(C("ai_call", "①对话", {"prompt": "你好"}, expect="fail", detail=True))
 
     # ---------------- 数据 / 文件
     A(C("data_ops", "①excel_write(旧名)", {"kind": "excel_write", "path": "out/mx.xlsx",
-        "rows": [{"a": 1, "b": 2}]}, expect="fail", note="实际参数 action=data_sheet_write"))
+        "rows": [{"a": 1, "b": 2}]}, expect="fail",
+        note="别名 excel_write 不存在，只有 data_sheet_* 系列"))
     A(C("data_ops", "①b data_sheet_write", {"action": "data_sheet_write", "path": "out/mx.xlsx",
         "rows": [{"a": 1, "b": 2}]}, artifact="out/mx.xlsx", detail=True))
     A(C("data_ops", "②sheet_read", {"action": "data_sheet_read", "path": "out/mx.xlsx"}, detail=True))
@@ -302,14 +303,15 @@ def cases() -> list[dict]:
         expect="fail", detail=True))
 
     A(C("file_ops", "①write(旧名 kind)", {"kind": "write", "path": "out/mx.txt", "content": "hi"},
-        expect="fail", note="实际参数 action"))
+        note="alias 生效：kind 与 action 等价"))
     A(C("file_ops", "①b 写入", {"action": "write", "path": "out/mx.txt", "content": "hi"},
         artifact="out/mx.txt"))
     A(C("file_ops", "②读取", {"action": "read", "path": "out/mx.txt"}, detail=True))
     A(C("file_ops", "③存在", {"action": "exists", "path": "out/mx.txt"}, detail=True))
     A(C("file_ops", "④列表", {"action": "list", "path": "out"}, detail=True))
-    A(C("file_ops", "⑤读系统 hosts（越界）", {"action": "read",
-        "path": "C:/Windows/System32/drivers/etc/hosts"}, detail=True))
+    A(C("file_ops", "⑤读系统 hosts（越界，应被拒）", {"action": "read",
+        "path": "C:/Windows/System32/drivers/etc/hosts"}, expect="fail",
+        note="只接受相对路径，绝对路径必须被拒"))
     A(C("file_ops", "⑥读不存在", {"action": "read", "path": "out/不存在.txt"}, expect="fail"))
 
     # ---------------- HTTP / 脚本 / 通知
