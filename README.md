@@ -77,6 +77,10 @@ rpa.exe run flows\demo.json
 ⚠️ **节点输出必须用 `save_as` 显式存成变量**，再用 `{变量名}` 引用。
 `{n2}`（拿节点 id 当变量名）**不是合法引用** —— 引擎不会自动把节点输出注册成同名变量，写了会报"变量未定义"。
 
+⚠️ **`type` 是节点名，不是 MCP 工具名**。`web_open` / `web_extract` / `data_sheet_write` 恰好同名是巧合；
+`web_read`（工具）对应的节点是 `web_elem_info`（`kind=text|value|html|attr` 都映射到它）。
+写流程前先 `list_node_types` / `inspect_node` 确认，别拿工具名直接填。
+
 ### 顶层契约
 
 `extra="forbid"` —— **键名写错直接报错**，不会静默忽略。

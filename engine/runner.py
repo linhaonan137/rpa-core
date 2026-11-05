@@ -75,6 +75,21 @@ class Runner:
             if not self.ctx.has_var(var.name):
                 self.ctx.set_var(var.name, var.value, scope="global")
 
+        # 流程内元素 manifest：交付时的快照，**只补全局库里没有的**。
+        # 优先级：ctx.elements（同进程刚拾的）> elements.json（本机最新）> flow.elements（交付兜底）。
+        # 这样换台机器（全局库为空）跑得起来，本机跑又不会被旧快照盖掉自愈修好的定义。
+        if self.flow.elements and isinstance(self.ctx.elements, dict):
+            try:
+                from elements.store import ElementStore
+                from engine.paths import ELEMENTS_PATH
+
+                known = set(ElementStore(str(ELEMENTS_PATH)).keys())
+            except Exception:  # noqa: BLE001
+                known = set()
+            for k, v in self.flow.elements.items():
+                if k not in known:
+                    self.ctx.elements[k] = v
+
         if self.opts.start_at:
             self.sch.bootstrap()
             self._skip_to(self.opts.start_at)

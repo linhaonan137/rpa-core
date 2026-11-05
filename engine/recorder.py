@@ -219,10 +219,35 @@ class Recorder:
             "elements": {},
         }
 
+    def export_elements(self, flow: dict[str, Any]) -> dict[str, Any]:
+        """扫流程里所有 `@el:` 引用，从全局库导出对应条目 → 流程内 manifest。
+
+        为什么必须导：流程带着 `@el:xxx` 却不带元素定义，换台机器（全局库为空）
+        就跑不起来，"流程能独立交付"这条就是空话。
+        """
+        import re
+
+        keys: set[str] = set()
+        for n in flow.get("nodes") or []:
+            for v in (n.get("args") or {}).values():
+                if isinstance(v, str):
+                    keys.update(re.findall(r"@el:([\w\-]+)", v))
+        if not keys:
+            return {}
+        try:
+            from elements.store import ElementStore
+            from engine.paths import ELEMENTS_PATH
+
+            store = ElementStore(str(ELEMENTS_PATH))
+        except Exception:  # noqa: BLE001
+            return {}
+        return {k: store.get(k).to_dict() for k in keys if store.has(k)}
+
     def stop(self, save_to: Any = None, name: str = "", title: str = "") -> dict[str, Any]:
         """停止录制，返回流程 dict；给了 save_to 就顺便落盘。"""
         self.active = False
         flow = self.build_flow(name, title)
+        flow["elements"] = self.export_elements(flow)
         out: dict[str, Any] = {
             "ok": True,
             "steps": len(flow["nodes"]),
