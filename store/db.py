@@ -61,8 +61,13 @@ class DB:
         d = os.path.dirname(path)
         if d:
             os.makedirs(d, exist_ok=True)
-        self.conn = sqlite3.connect(path, check_same_thread=False)
+        self.conn = sqlite3.connect(path, check_same_thread=False, timeout=30.0)
         self.conn.row_factory = sqlite3.Row
+        # 两个进程（HTTP 服务 / MCP 服务）写同一个 rpa.db。WAL 已在 SCHEMA 里开，
+        # 但没有 busy_timeout 时撞锁只会等 driver 默认 5s，之后抛 OperationalError ——
+        # 流程已经跑完、业务已成功，却因为写审计记录失败被判失败（n8n 会重投 → 重复提交）。
+        self.conn.execute("PRAGMA busy_timeout=30000")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.executescript(SCHEMA)
         self.conn.commit()
 

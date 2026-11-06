@@ -230,7 +230,7 @@ async def test_disabled_node_skipped():
 
 @pytest.mark.asyncio
 async def test_unknown_node_type_raises():
+    """节点类型写错在**装载期**就抛（不再跑到那一步才 KeyError —— 前面步骤已有副作用）。"""
     f = flow([node("n1", "不存在的类型")], [])
-    r = await run_flow(f)
-    assert r["ok"] is False
-    assert "未注册" in (r["nodes"][0]["error"] or "")
+    with pytest.raises(KeyError, match="未注册"):
+        await run_flow(f)

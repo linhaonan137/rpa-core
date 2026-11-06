@@ -161,14 +161,45 @@ class ElementStore:
         self._items = {k: ElementEntry.from_dict({**v, "key": k}) for k, v in data.items()}
 
     def save(self) -> None:
+        """落盘（合并写）。
+
+        两个进程（HTTP 服务 / MCP 服务）共享同一个 elements.json。原来直接把
+        构造时的 `_items` 全量重写，另一个进程在这期间新增的条目会被旧快照覆盖
+        —— 实测 `web_pick` 报成功但库里没有，就是这个。这里改成：
+          1. 先 reload 磁盘现状，按 key 合并（同 key 取 mtime 新的）
+          2. tmp 文件名带 pid，避免两进程撞同一个 .tmp 写坏文件
+        """
         if not self.path:
             return
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        payload = {"version": 1, "elements": {k: v.to_dict() for k, v in self._items.items()}}
-        tmp = f"{self.path}.tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, self.path)  # 原子写：不会留半截文件
+
+        merged: dict[str, Any] = {}
+        if os.path.exists(self.path):
+            try:
+                with open(self.path, encoding="utf-8") as f:
+                    raw = json.load(f)
+                data = raw.get("elements", raw) if isinstance(raw, dict) else {}
+                merged = {k: ElementEntry.from_dict({**v, "key": k}) for k, v in data.items()}
+            except Exception:  # noqa: BLE001 - 磁盘文件坏了就用内存的覆盖回去
+                merged = {}
+        for key, entry in self._items.items():
+            old = merged.get(key)
+            if old is None or _mtime(entry) >= _mtime(old):
+                merged[key] = entry
+        self._items = merged
+
+        payload = {"version": 1, "elements": {k: v.to_dict() for k, v in merged.items()}}
+        tmp = f"{self.path}.{os.getpid()}.tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, self.path)  # 原子写：不会留半截文件
+        finally:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
 
     # ---------------------------------------------------------- CRUD
 
@@ -262,6 +293,15 @@ def _walk(obj: Any) -> Iterable[Any]:
             yield from _walk(v)
     else:
         yield obj
+
+
+def _mtime(entry: Any) -> str:
+    """条目"最后修改时间"，合并写时用来判断取哪份。"""
+    meta = getattr(entry, "meta", None) or {}
+    try:
+        return str(meta.get("updated_at") or meta.get("created_at") or "")
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _now() -> str:

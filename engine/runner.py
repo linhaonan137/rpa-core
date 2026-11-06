@@ -67,6 +67,35 @@ class Runner:
 
     # ------------------------------------------------------------ 入口
 
+    def _preflight(self) -> None:
+        """装载期校验：节点类型名写错 / 把 MCP 工具名当节点名，在这里就报。
+
+        不校验的代价：流程跑到第 N 步才 `KeyError: 未注册的节点类型`，
+        而前面 N-1 步的点击/提交已经产生副作用（实测 `web_switch` 跑了 29 步才炸）。
+        """
+        import difflib
+
+        from engine.registry import registry as _reg
+
+        nodes = getattr(self.g, "nodes", {})
+        pairs = nodes.items() if hasattr(nodes, "items") else [(n.id, n) for n in nodes]
+        known = _reg.types()
+        bad: list[str] = []
+        for nid, node in pairs:
+            if _reg.has(node.type):
+                continue
+            hint = difflib.get_close_matches(node.type, known, n=2, cutoff=0.6)
+            tip = f"，是不是 {' / '.join(hint)}？" if hint else ""
+            bad.append(f"{nid}({node.type}){tip}")
+        if bad:
+            # 抛 KeyError 而不是 RuntimeError：MCP/HTTP 已有「流程配置错误」分支会把它
+            # 渲染成可读信息，而不是笼统的「执行器异常」
+            raise KeyError(
+                "流程里有未注册的节点类型（装载期校验）："
+                + "；".join(bad[:5])
+                + "。注意：MCP 工具名 ≠ 节点名（web_switch→web_tab、web_fill→web_type）。"
+            )
+
     async def execute(self) -> dict[str, Any]:
         t0 = time.perf_counter()
 
@@ -90,6 +119,8 @@ class Runner:
                 if k not in known:
                     self.ctx.elements[k] = v
 
+        self._preflight()
+
         if self.opts.start_at:
             self.sch.bootstrap()
             self._skip_to(self.opts.start_at)
@@ -108,7 +139,28 @@ class Runner:
 
             for nid, res in zip(wave, results):
                 if isinstance(res, BaseException):
+                    # 节点内部抛错（if 的条件表达式、loop 的 resolve 等）必须落日志并停。
+                    # 不记就等于"这一波没发生过"——ok 只由 logs 推导，流程会报绿，
+                    # 而实际两条分支都没执行（实测 noop→if(变量拼错)→true:noop 返回 ok=True）。
                     res = _wrap_exc(res)
+                    node_type = "?"
+                    try:
+                        node_type = self.g.nodes[nid].type
+                    except Exception:  # noqa: BLE001
+                        pass
+                    self.logs.append(
+                        NodeLog(
+                            nid,
+                            node_type,
+                            False,
+                            0.0,
+                            str(getattr(res, "error", "") or res),
+                            False,
+                            1,
+                            False,
+                        )
+                    )
+                    self.ctx.should_stop = True
                 if self.ctx.should_stop:
                     self.stopped = True
                 if self._requeue:

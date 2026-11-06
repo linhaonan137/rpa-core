@@ -162,6 +162,9 @@ def create_app(
                 result = await Runner(flow, ctx, RunOptions()).execute()
         except ContextError as exc:
             raise HTTPException(400, f"上下文错误: {exc}") from exc
+        except KeyError as exc:
+            # 装载期校验（节点类型名写错 / 把 MCP 工具名当节点名）→ 400，不是 500
+            raise HTTPException(400, f"流程配置错误: {exc}") from exc
         except BrowserBusy as exc:
             raise HTTPException(409, str(exc)) from exc
         finally:
@@ -175,18 +178,26 @@ def create_app(
                         except Exception:  # noqa: BLE001
                             pass
 
-        db.save_run(
-            run_id,
-            flow.name,
-            bool(result["ok"]),
-            result["nodes"],
-            stopped=bool(result.get("stopped")),
-            steps=int(result.get("steps", 0)),
-            ms=float(result.get("ms", 0)),
-        )
+        db_saved = True
+        try:
+            db.save_run(
+                run_id,
+                flow.name,
+                bool(result["ok"]),
+                result["nodes"],
+                stopped=bool(result.get("stopped")),
+                steps=int(result.get("steps", 0)),
+                ms=float(result.get("ms", 0)),
+            )
+        except Exception as exc:  # noqa: BLE001 - 审计写失败不该把已成功的业务判成失败
+            # 原来直接抛 → 500 → n8n 判定失败并重投 → 重复提交（业务其实已经成功）
+            db_saved = False
+            ctx.log("warn", f"save_run 失败（不影响业务结果）: {type(exc).__name__}: {exc}")
+
         return JSONResponse(
             {
                 "run_id": run_id,
+                "db_saved": db_saved,
                 "ok": result["ok"],
                 "ms": result["ms"],
                 "failed": result["failed"],
