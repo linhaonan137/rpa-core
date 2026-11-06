@@ -426,6 +426,20 @@ async def _pick(loc: Any, label: str, limit_ms: int = DEFAULT_LIMIT_MS) -> Any:
         raise _LocateError(f"定位失败: {label} ({exc})") from exc
     if not count:
         raise _LocateError(f"元素不存在: {label}")
+    # ③ 多个匹配时**优先取可见的**：真实站点常见「隐藏的旧版 + 可见的新版」并存
+    #    （京东首页搜索框就是两套 .jd_pc_search_bar_react_search_input，first 是隐藏的），
+    #    取 first 之后 fill/click 会一直等可见直到超时。count=1 时这段不执行，零开销。
+    if count > 1:
+        try:
+            for i in range(min(count, 20)):
+                cand = loc.nth(i)
+                try:
+                    if await cand.is_visible():
+                        return cand
+                except Exception:  # noqa: BLE001
+                    continue
+        except Exception:  # noqa: BLE001
+            pass
     return target
 
 
@@ -1567,7 +1581,8 @@ JS_DISCOVER_FIELDS = r"""
     if (r.width < 20 || r.height < 8) continue;
     const ty = (e.getAttribute("type") || "").toLowerCase();
     if (ty === "hidden") continue;
-    const label = labelOf(e);
+    const label = (labelOf(e) || (e.getAttribute("aria-label") || "").trim()
+                   || (e.getAttribute("placeholder") || "").trim());
     const value = String(e.value || "");
     if (!includeEmpty && !value) continue;
     out.push({

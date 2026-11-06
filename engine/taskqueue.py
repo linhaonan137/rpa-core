@@ -81,7 +81,10 @@ class TaskQueue:
             return {"ok": False, "error": "队列未绑定执行器（内部错误）"}
         tid = f"t-{int(time.time())}-{uuid.uuid4().hex[:6]}"
         rec = TaskRecord(tid, flow, dict(variables or {}))
-        rec.position = sum(1 for r in self._records.values() if r.status == "queued") + 1
+        # 位置 = 前面还有几个任务（**在跑的也算**）+ 自己。
+        # 只数 queued 会把正在占执行槽的那个漏掉：并发提交时第 2、3 个都报"第 1 位"。
+        _busy = sum(1 for r in self._records.values() if r.status in ("queued", "running"))
+        rec.position = _busy + 1
         self._records[tid] = rec
         self._order.append(tid)
         self._trim()
@@ -94,6 +97,20 @@ class TaskQueue:
             "message": f"已入队（第 {rec.position} 位），用 flow_task(task_id='{tid}') 查进度",
         }
 
+    def _refresh_positions(self) -> None:
+        """重算排队中任务的位置：前面有几个（在跑的 + 排队的），它就是第几位。
+
+        不刷新的话，前一个跑完了，后面的人还显示原来的位置 —— 用户会以为队列没动。
+        """
+        n = 0
+        for tid in self._order:
+            r = self._records.get(tid)
+            if r is None or r.status not in ("queued", "running"):
+                continue
+            n += 1
+            if r.status == "queued":
+                r.position = n
+
     async def _run(self, rec: TaskRecord) -> None:
         try:
             async with self._sem:
@@ -104,6 +121,7 @@ class TaskQueue:
                 rec.started = time.time()
                 rec.position = 0
                 self._running += 1
+                self._refresh_positions()
                 try:
                     assert self._runner is not None
                     rec.result = await self._runner(rec.flow, rec.vars)
@@ -130,6 +148,7 @@ class TaskQueue:
             raise
         finally:
             self._live.pop(rec.id, None)
+            self._refresh_positions()
             self._reindex()
 
     # ---------------------------------------------------------- 查询
