@@ -468,6 +468,69 @@ async def _launch(headless: bool = True) -> tuple[Any, Any]:
     return pw, browser
 
 
+def _profile_dir() -> Path | None:
+    """持久 profile 目录；`RPA_PROFILE=off` 关掉（回到临时 profile）。
+
+    为什么要持久：Playwright 默认给每次 launch 建一个
+    `playwright_chromiumdev_profile-XXXX` 临时目录，进程一退就删干净 ——
+    登录态完全留不下，每次跑流程都要重新登录。
+    换成固定目录后：登录一次，之后所有请求都带着。
+    """
+    raw = (os.getenv("RPA_PROFILE") or "").strip()
+    if raw.lower() in ("off", "0", "none", "false"):
+        return None
+    if raw:
+        return Path(raw).expanduser()
+    from engine.paths import PROJECT_ROOT
+
+    return Path(PROJECT_ROOT) / ".chrome-profile"
+
+
+async def _launch_persistent(headless: bool = True) -> tuple[Any, Any]:
+    """用持久 profile 启动，返回 (playwright, context)。
+
+    注意 `launch_persistent_context` 只给 context，没有 browser 对象
+    （persistent context 本来就不挂在某个 browser 下）。
+    """
+    from playwright.async_api import async_playwright
+
+    from engine import stealth
+
+    profile = _profile_dir()
+    if profile is None:
+        raise RuntimeError("没有配置 profile")
+    profile.mkdir(parents=True, exist_ok=True)
+    pw = await async_playwright().start()
+    try:
+        context = await pw.chromium.launch_persistent_context(
+            str(profile), **stealth.launch_kwargs(headless, channel="chrome")
+        )
+    except Exception:  # noqa: BLE001 - 没系统 Chrome 就试内置
+        context = await pw.chromium.launch_persistent_context(
+            str(profile), **stealth.launch_kwargs(headless, channel=None)
+        )
+    return pw, context
+
+
+async def _open_browser(headless: bool = True) -> tuple[Any, Any, Any]:
+    """统一启动入口：返回 (playwright, browser, context)。
+
+    优先持久 profile（登录态留得住）；失败（profile 被另一个 Chrome 占着、
+    权限不够等）才回退临时 profile —— 宁可丢登录态也别让流程跑不起来。
+    """
+    if _profile_dir() is not None:
+        try:
+            pw, context = await _launch_persistent(headless)
+            return pw, getattr(context, "browser", None), context
+        except Exception:  # noqa: BLE001
+            pass
+
+    pw, browser = await _launch(headless=headless)
+    contexts = _safe_list(getattr(browser, "contexts", None) or [])
+    context = contexts[0] if contexts else await browser.new_context()
+    return pw, browser, context
+
+
 async def _ensure_page(
     ctx: ExecutionContext, *, new_tab: bool = False, headless: bool | None = None
 ) -> Any:
@@ -479,16 +542,11 @@ async def _ensure_page(
     if page is not None and not new_tab:
         return page
 
-    browser = getattr(ctx, "browser", None)
-    if browser is None:
-        pw, browser = await _launch(headless=headless)
-        setattr(ctx, "_playwright", pw)
-        setattr(ctx, "browser", browser)
-
     context = getattr(ctx, "browser_context", None)
     if context is None:
-        contexts = _safe_list(getattr(browser, "contexts", None) or [])
-        context = contexts[0] if contexts else await browser.new_context()
+        pw, browser, context = await _open_browser(headless=headless)
+        setattr(ctx, "_playwright", pw)
+        setattr(ctx, "browser", browser)
         setattr(ctx, "browser_context", context)
         try:
             from engine import stealth

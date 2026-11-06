@@ -17,6 +17,7 @@ flows/*.tmp
 
 # ---- 浏览器 profile（含登录 Cookie / 密码库 / 浏览历史）----
 .chrome-debug-profile/
+.chrome-profile/
 *.profile/
 chrome-profile/
 

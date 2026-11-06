@@ -166,6 +166,7 @@ async def test_open_page_launches_when_no_page(monkeypatch):
         return MagicMock(), browser
 
     monkeypatch.setattr(web, "_launch", fake_launch)
+    monkeypatch.setattr(web, "_profile_dir", lambda: None)  # 测试走临时 profile，不碰真实登录态
     ctx = make_ctx(None)
 
     r = await web.web_open({"url": "https://b.com", "kind": "new_tab"}, ctx)

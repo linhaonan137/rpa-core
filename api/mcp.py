@@ -41,13 +41,11 @@ _SHARED_BROWSER: dict[str, Any] = {}
 
 async def _attach_shared_browser(ctx: ExecutionContext) -> None:
     """把进程级共享浏览器挂到给定 ctx 上；首次调用才真正启动。"""
-    if _SHARED_BROWSER.get("browser") is None:
+    if _SHARED_BROWSER.get("context") is None:  # 持久 profile 时 browser 可能是 None
         from engine import stealth
-        from nodes.web import _default_headless, _launch
+        from nodes.web import _default_headless, _open_browser
 
-        pw, browser = await _launch(headless=_default_headless())
-        contexts = list(getattr(browser, "contexts", None) or [])
-        context = contexts[0] if contexts else await browser.new_context()
+        pw, browser, context = await _open_browser(headless=_default_headless())
         try:
             await stealth.apply(context, ctx)
         except Exception:  # noqa: BLE001 - 注入失败不中断
