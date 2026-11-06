@@ -1,86 +1,252 @@
 {
-  "name": "拼多多发新商品：主图 + 标题（引擎跨站点验证）",
+  "name": "拼多多发新商品：主图+标题+类目 → 进入完善商品信息页（状态等待）",
   "version": 1,
   "nodes": [
     {
-      "id": "n1",
       "type": "web_open",
       "label": "打开发品页",
       "args": {
         "url": "https://mms.pinduoduo.com/goods/category",
         "until": "dom",
-        "jitter": [600, 1200]
-      }
+        "jitter": [
+          600,
+          1200
+        ]
+      },
+      "id": "n1"
     },
     {
-      "id": "n2",
       "type": "web_wait",
-      "label": "等标题框（@el:）",
+      "label": "等标题框",
       "args": {
         "target": "@el:pdd_title_input",
         "kind": "visible",
         "limit_ms": 20000,
-        "jitter": [300, 700]
+        "jitter": [
+          300,
+          700
+        ]
       },
       "on_fail": {
         "mode": "retry",
         "attempts": 2,
         "backoff_ms": 1200
-      }
+      },
+      "id": "n2"
     },
     {
-      "id": "n3",
       "type": "web_upload",
-      "label": "直接给 file input 传主图（无 iframe）",
+      "label": "主图直传 file input",
       "args": {
         "target": "@el:pdd_main_img_input",
         "path": "{主图}",
-        "jitter": [400, 900]
-      }
+        "jitter": [
+          400,
+          900
+        ]
+      },
+      "id": "n3"
     },
     {
-      "id": "n4",
       "type": "web_type",
-      "label": "商品标题（@el:，真实键盘）",
+      "label": "商品标题",
       "args": {
         "target": "@el:pdd_title_input",
         "text": "{标题}",
         "kind": "type",
         "delay_ms": 70,
-        "jitter": [300, 700]
-      }
+        "jitter": [
+          300,
+          700
+        ]
+      },
+      "id": "n4"
     },
     {
-      "id": "n5",
       "type": "web_wait",
-      "label": "等主图上传完成",
+      "label": "等上传完成（主轮播图出现，不是 1/10）",
       "args": {
-        "text": "1/10",
-        "limit_ms": 15000,
-        "jitter": [400, 800],
-        "on_fail": {
-          "mode": "skip"
-        }
-      }
+        "text": "主轮播图",
+        "limit_ms": 20000,
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n5"
     },
     {
-      "id": "n6",
       "type": "web_js",
-      "label": "末尾业务断言：标题 + 主图",
+      "label": "轮询等真实上传完成（CSS 背景图变 CDN）",
       "args": {
-        "code": "() => { const inp = document.querySelector(\"input[placeholder*='商品标题组成']\"); const title = inp ? inp.value : ''; const t = document.body.innerText; const m = t.match(/\\((\\d+)\\/10\\)/); const imgs = m ? parseInt(m[1]) : 0; if (!title || imgs < 1) { throw new Error('业务断言失败: 标题=' + title + ' 主图=' + imgs); } return '标题=' + title + ' 主图=' + imgs; }"
-      }
+        "code": "async () => {\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  for (let i = 0; i < 50; i++) {\n    const t = document.body.innerText;\n    const boxes = [...document.querySelectorAll('[class*=imageBox], [class*=materialContainer]')];\n    const bg = boxes.some(e => { const s = getComputedStyle(e).backgroundImage || ''; return s.indexOf('pddpic.com') >= 0 || s.indexOf('yangkeduo.com') >= 0; });\n    const inp = document.querySelector(\"input[placeholder*='商品标题组成']\");\n    const title = inp ? inp.value : '';\n    if (bg && title && t.indexOf('预览') >= 0 && t.indexOf('更换') >= 0 && t.indexOf('请上传商品轮播图') < 0) {\n      return '上传完成(CSS背景图) 标题=' + title;\n    }\n    await sleep(300);\n  }\n  throw new Error('等主图上传完成超时：CSS 背景图未出现');\n}"
+      },
+      "id": "n6"
+    },
+    {
+      "type": "web_click",
+      "label": "第1次下一步：展开类目推荐",
+      "args": {
+        "target": "@el:pdd_next_btn",
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n7"
+    },
+    {
+      "type": "web_js",
+      "label": "诊断：第一次下一步后的反馈",
+      "args": {
+        "code": "() => { const t = document.body.innerText.replace(/\\s+/g,' '); return { 有推荐: t.indexOf('推荐使用以下分类') >= 0, 有请上传: t.indexOf('请上传商品轮播图') >= 0, 有类目: t.indexOf('商品分类') >= 0, url: location.href.slice(0, 70) }; }",
+        "save_as": "pdd_after_first_next"
+      },
+      "id": "n8"
+    },
+    {
+      "type": "web_wait",
+      "label": "等类目推荐区出现",
+      "args": {
+        "text": "推荐使用以下分类",
+        "limit_ms": 15000,
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n9"
+    },
+    {
+      "type": "web_click",
+      "label": "选平台推荐第一个类目",
+      "args": {
+        "target": "css=[class*=cateItemCard_chooseCategory_] >> nth=0",
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n10"
+    },
+    {
+      "type": "web_js",
+      "label": "断言：类目卡片已选中",
+      "args": {
+        "code": "() => { const c = document.querySelector('[class*=cateItemCard_checked]'); if (!c) throw new Error('类目未选中，不能点下一步'); return '类目已选'; }"
+      },
+      "id": "n11"
+    },
+    {
+      "type": "web_click",
+      "label": "第2次下一步：进入完善商品信息",
+      "args": {
+        "target": "@el:pdd_next_btn",
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n12"
+    },
+    {
+      "type": "web_wait",
+      "label": "等下一页（保存草稿按钮出现）",
+      "args": {
+        "text": "保存草稿",
+        "limit_ms": 20000,
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n13"
+    },
+    {
+      "type": "web_js",
+      "label": "末尾断言：已进入 goods_add 页",
+      "args": {
+        "code": "() => { if (location.href.indexOf('goods_add') < 0) throw new Error('未进入完善商品信息页: ' + location.href.slice(0,80)); return '已进入 ' + location.href.slice(0,80); }",
+        "save_as": "pdd_next_url"
+      },
+      "id": "n14"
     }
   ],
   "edges": [
-    {"id": "e1", "from": "n1", "to": "n2"},
-    {"id": "e2", "from": "n2", "to": "n3"},
-    {"id": "e3", "from": "n3", "to": "n4"},
-    {"id": "e4", "from": "n4", "to": "n5"},
-    {"id": "e5", "from": "n5", "to": "n6"}
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "id": "e2",
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "id": "e3",
+      "from": "n3",
+      "to": "n4"
+    },
+    {
+      "id": "e4",
+      "from": "n4",
+      "to": "n5"
+    },
+    {
+      "id": "e5",
+      "from": "n5",
+      "to": "n6"
+    },
+    {
+      "id": "e6",
+      "from": "n6",
+      "to": "n7"
+    },
+    {
+      "id": "e7",
+      "from": "n7",
+      "to": "n8"
+    },
+    {
+      "id": "e8",
+      "from": "n8",
+      "to": "n9"
+    },
+    {
+      "id": "e9",
+      "from": "n9",
+      "to": "n10"
+    },
+    {
+      "id": "e10",
+      "from": "n10",
+      "to": "n11"
+    },
+    {
+      "id": "e11",
+      "from": "n11",
+      "to": "n12"
+    },
+    {
+      "id": "e12",
+      "from": "n12",
+      "to": "n13"
+    },
+    {
+      "id": "e13",
+      "from": "n13",
+      "to": "n14"
+    }
   ],
   "vars": [
-    {"name": "主图", "value": "F:\\workspace\\projects\\rpa\\assets\\main\\main_01.png"},
-    {"name": "标题", "value": "测试商品请勿拍下自动化验证用"}
+    {
+      "name": "主图",
+      "value": "F:\\workspace\\projects\\rpa\\assets\\main\\main_01.png"
+    },
+    {
+      "name": "标题",
+      "value": "测试商品请勿拍下自动化验证用"
+    }
   ]
 }
