@@ -379,10 +379,14 @@ async def _locate(
 
             # 元素级 frame 链：这个元素在 iframe 里 → 从 iframe 内部开始找
             # （_root 只处理流程级 ctx.frames，元素自己的位置是存进指纹的）
+            # 注意：若流程已经 web_frame_in 进过同一层 iframe，ctx.frames 里已有它，
+            # 不能再叠一层（实测：iframe 内元素拾取后再 @el: 引用，双层 frame_locator
+            # 导致六维定位全 0）。
             el_root = root
+            existing = _safe_list(getattr(ctx, "frames", None) or [])
             for fsel in (entry.get("frame") or []):
                 sel_expr = fsel.get("selector") if isinstance(fsel, dict) else str(fsel)
-                if sel_expr:
+                if sel_expr and sel_expr not in existing:
                     el_root = el_root.frame_locator(sel_expr)
 
             try:

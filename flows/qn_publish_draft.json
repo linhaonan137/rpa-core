@@ -357,7 +357,7 @@
       "type": "web_click",
       "label": "主图1：点空位",
       "args": {
-        "target": "div.image-empty >> nth=0",
+        "target": "@el:qn_main_img_empty",
         "jitter": [
           300,
           700
@@ -392,7 +392,7 @@
       "type": "web_click",
       "label": "主图1：点本地上传",
       "args": {
-        "target": "text=本地上传",
+        "target": "@el:qn_img_local_upload",
         "jitter": [
           300,
           600
@@ -462,7 +462,7 @@
       "type": "web_click",
       "label": "主图2：点空位",
       "args": {
-        "target": "div.image-empty >> nth=0",
+        "target": "@el:qn_main_img_empty",
         "jitter": [
           300,
           700
@@ -497,7 +497,7 @@
       "type": "web_click",
       "label": "主图2：点本地上传",
       "args": {
-        "target": "text=本地上传",
+        "target": "@el:qn_img_local_upload",
         "jitter": [
           300,
           600
@@ -567,7 +567,7 @@
       "type": "web_click",
       "label": "主图3：点空位",
       "args": {
-        "target": "div.image-empty >> nth=0",
+        "target": "@el:qn_main_img_empty",
         "jitter": [
           300,
           700
@@ -602,7 +602,7 @@
       "type": "web_click",
       "label": "主图3：点本地上传",
       "args": {
-        "target": "text=本地上传",
+        "target": "@el:qn_img_local_upload",
         "jitter": [
           300,
           600
@@ -672,7 +672,7 @@
       "type": "web_click",
       "label": "主图4：点空位",
       "args": {
-        "target": "div.image-empty >> nth=0",
+        "target": "@el:qn_main_img_empty",
         "jitter": [
           300,
           700
@@ -707,7 +707,7 @@
       "type": "web_click",
       "label": "主图4：点本地上传",
       "args": {
-        "target": "text=本地上传",
+        "target": "@el:qn_img_local_upload",
         "jitter": [
           300,
           600
@@ -777,7 +777,7 @@
       "type": "web_click",
       "label": "主图5：点空位",
       "args": {
-        "target": "div.image-empty >> nth=0",
+        "target": "@el:qn_main_img_empty",
         "jitter": [
           300,
           700
@@ -812,7 +812,7 @@
       "type": "web_click",
       "label": "主图5：点本地上传",
       "args": {
-        "target": "text=本地上传",
+        "target": "@el:qn_img_local_upload",
         "jitter": [
           300,
           600
