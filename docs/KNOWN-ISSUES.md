@@ -57,14 +57,43 @@
 
 流程里写 `{"type":"web_el_action","args":{"key":"元素名"}}` 即可；规则也可在 `web_pick(interaction={...})` 时直接带上。
 
-**待填规则表**（用户给一行，我写一条数据）：
+**交互逻辑挂在哪一层**（别混）：
 
-| 控件 | open | choose | close | close_target |
-|---|---|---|---|---|
-| 多选下拉（面料等）| click | first-option | click-blank | `text=商品属性` |
-| 主图勾选框 | hover | — | click-blank | `text=基础上传要求` |
-| 尺码弹层 | click | `{"text":"175/88A"}` | click-finish | — |
-| 颜色面板 | click | — | escape | — |
+| 层 | 内容 | 存哪 |
+|---|---|---|
+| 元素库条目 | **一个具体控件**（input/button/checkbox），只是锚点：它在哪 | `role/name/attrs/path/anchor` |
+| `hints.interaction` | **操作这一个控件**的配方：怎么唤起 → 怎么选 → 怎么收尾 | 本条 |
+| 元素之间的先后 | 先点哪个、再点哪个 | 流程 `edges`（不变） |
+
+浮层、下拉选项、"完成"按钮**不是元素库条目**，是控件点开后临时冒出来的对象，由配方里的 `option_selector` / `close_target` 处理掉、让页面回到干净状态。
+
+**判定方式**（4 个观测，不是猜）：
+
+| 观测 | 判定 |
+|---|---|
+| 点后无新浮层 | `close=none` |
+| 点后出现候选项 | `choose=first-option` / `{"text":...}` / `{"index":n}` |
+| 选完浮层仍在 | `close=click-blank` / `click-finish` / `escape` |
+| 控件默认 hidden | `open=hover` |
+| 纯展示元素 | `readonly=true`，不点 |
+| 需要 iframe 进出 | `requires=iframe_in_out`，通用节点明确拒绝 |
+
+**`web_el_action` 支持的字段**：`open(click/hover/none)`、`text`（真实键盘，React 受控）、`choose`、`option_selector`、`close`、`close_target`、`after`（如 `Tab` 触发自动汇总）、`wait_ms`。
+
+**2026-11-06 18:20 已给全部 15 条写入配方**（`source=measured` 3 / `inferred` 12，推定项待站上确认）：
+
+| 类别 | 元素 | 配方 |
+|---|---|---|
+| 只读 | `db_heading` `db_rating` | `open=none, readonly` |
+| 点一下就走 | `db_next_page` `db_first_movie` `qn_goods_menu` `qn_publish_link` `qn_confirm_next` `qn_save_draft` | `open=click, close=none` |
+| 文本输入 | `qn_title_input` `qn_subtitle_input` | `open=click`，`text` 由流程传 |
+| 输入 + 失焦 | `qn_price_input` | `after=Tab`（触发汇总）|
+| 下拉选项 | `qn_brand_select` | `choose=first-option`（选项容器待确认）|
+| **实测** | `qn_color_input` | `close=escape`（不关会挡住尺码）|
+| **实测** | `qn_size_input` | `choose={"text":"175/88A"}, close=click-finish, wait_ms=1000` |
+| **实测** | `qn_main_img_slot` | `close=click-blank, requires=iframe_in_out` |
+
+`source=inferred` 的 12 条是**按 role/tag 推定**，不是实测结论；站上验证后改成 `measured`。
 
 ## 3. 延后（⚠️ 到最后期限必须先修）
 

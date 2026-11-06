@@ -47,6 +47,15 @@ async def web_el_action(args: dict[str, Any], ctx: Any) -> Result:
     if not target:
         return Result.fail("web_el_action: 需要 key 或 target")
 
+    # 有些控件需要 iframe 进出（主图素材选择器），通用节点做不了，明确拒绝而不是乱点
+    if inter.get("requires") == "iframe_in_out":
+        return Result.fail(
+            f"web_el_action: @el:{key} 需要 iframe 进出，请用主图专用流程节点；"
+            f"配方仅作记录：{inter.get('note', '')}"
+        )
+    if inter.get("readonly"):
+        return Result.done("只读元素，未操作", data={"steps": [], "key": key, "readonly": True})
+
     limit = int(args.get("limit_ms", 8000))
     done: list[str] = []
 
@@ -67,7 +76,13 @@ async def web_el_action(args: dict[str, Any], ctx: Any) -> Result:
     if wait:
         await asyncio.sleep(wait / 1000)
 
-    # ② 选项
+    # ② 输入值（React 受控框必须走真实键盘，不能用 fill）
+    text = inter.get("text")
+    if text is not None and str(text) != "":
+        await page.keyboard.type(str(text), delay=int(inter.get("delay_ms") or 60))
+        done.append("type")
+
+    # ③ 选项
     choose = inter.get("choose")
     opt_sel = str(inter.get("option_selector") or DEFAULT_OPTION)
     if choose:
@@ -84,7 +99,7 @@ async def web_el_action(args: dict[str, Any], ctx: Any) -> Result:
         done.append(f"choose:{choose}")
         await asyncio.sleep(min(300, wait) / 1000)
 
-    # ③ 关闭
+    # ④ 关闭
     close = str(inter.get("close") or "none")
     if close == "click-blank":
         ct = str(inter.get("close_target") or "")
@@ -100,5 +115,11 @@ async def web_el_action(args: dict[str, Any], ctx: Any) -> Result:
         done.append("escape")
     elif close != "none":
         return Result.fail(f"web_el_action: 未知 close={close!r}")
+
+    # ⑤ 收尾按键（例：总库存是 disabled 自动汇总，Tab 失焦才更新）
+    after = str(inter.get("after") or "").strip()
+    if after:
+        await page.keyboard.press(after)
+        done.append("after:" + after)
 
     return Result.done(f"交互完成: {' → '.join(done)}", data={"steps": done, "key": key})

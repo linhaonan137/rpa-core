@@ -162,6 +162,9 @@ class _FakePage:
     async def press(self, key: str) -> None:
         self.log.append("key:" + key)
 
+    async def type(self, text: str, **_kw) -> None:
+        self.log.append("type:" + text)
+
 
 async def test_el_action_runs_interaction_recipe(monkeypatch):
     """交互规则写进数据：点开 → 选第一项 → 点容器外空白（不再每个字段硬写节点）。"""
@@ -210,3 +213,48 @@ async def test_el_action_escape_close(monkeypatch):
     )
     assert r.ok is True
     assert "hover:target" in log and "key:Escape" in log
+
+
+async def test_el_action_type_and_after(monkeypatch):
+    """输入类配方：真实键盘 type + 收尾按键（总库存靠 Tab 失焦汇总）。"""
+    import nodes.web as web
+    from nodes.el_action import web_el_action
+
+    log: list[str] = []
+
+    async def _fake_locate(_page, _target, _hints, _ctx, _limit):
+        return _FakeLoc(log, "target")
+
+    monkeypatch.setattr(web, "_locate", _fake_locate)
+    page = _FakePage(log)
+    ctx = ExecutionContext()
+    ctx.page = page
+    r = await web_el_action(
+        {"target": "css=input.x",
+         "interaction": {"open": "click", "text": "99", "close": "none",
+                         "after": "Tab", "wait_ms": 0}},
+        ctx,
+    )
+    assert r.ok is True
+    assert "after:Tab" in r.data["steps"]
+
+
+async def test_el_action_rejects_readonly_and_iframe(monkeypatch):
+    """只读元素不点；需要 iframe 进出的明确拒绝，不乱点。"""
+    from nodes import el_action
+    import nodes.web as web
+
+    class _Entry(dict):
+        def __init__(self, inter):
+            super().__init__(hints={"interaction": inter})
+
+    ctx = ExecutionContext()
+    ctx.page = _FakePage([])
+
+    monkeypatch.setattr(web, "_library_entry", lambda k, c: _Entry({"readonly": True}))
+    r = await el_action.web_el_action({"key": "db_heading"}, ctx)
+    assert r.ok is True and r.data["readonly"] is True
+
+    monkeypatch.setattr(web, "_library_entry", lambda k, c: _Entry({"requires": "iframe_in_out"}))
+    r2 = await el_action.web_el_action({"key": "qn_main_img_slot"}, ctx)
+    assert r2.ok is False and "iframe" in r2.error
