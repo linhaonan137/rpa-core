@@ -558,24 +558,44 @@ async def _ensure_page(
         except Exception:  # noqa: BLE001 - 注入失败不中断
             pass
 
-    # 页面数上限：共享浏览器时（HTTP/n8n 长期跑）页面会一直堆，
-    # 每个页面都带渲染进程，几百次就吃满内存。超过上限就关最老的，
-    # 不做"本次请求开了哪些页"的记账 —— 那一套在异步队列里根本拿不到。
+    # 页面数上限：只关**本进程自己 new_page 出来的**页，且跳过当前页。
+    # 旧逻辑按 context.pages 顺序关最老的 —— 那可能是用户手开的千牛页，
+    # 或另一个进程（HTTP 服务）正在填的页，实测会把人正在用的标签关掉。
     _pages = _safe_list(getattr(context, "pages", None) or [])
     if len(_pages) >= _MAX_PAGES_PER_CONTEXT:
-        for _old in _pages[: len(_pages) - (_MAX_PAGES_PER_CONTEXT - 1)]:
+        for _old in list(_pages):
+            if len(_pages) <= _MAX_PAGES_PER_CONTEXT - 1:
+                break
+            if _old is page or id(_old) not in _OWNED_PAGES:
+                continue                      # 不是我们开的页，一律不动
             try:
                 await _old.close()
+                _OWNED_PAGES.discard(id(_old))
+                _pages = [p for p in _pages if p is not _old]
             except Exception:  # noqa: BLE001 - 关不掉就算了，不影响主流程
                 pass
 
     if page is not None:
-        page = await context.new_page()
+        page = await _new_page(context)
     else:
-        pages = _safe_list(getattr(context, "pages", None) or [])
-        page = pages[0] if pages else await context.new_page()
+        # ctx.page 为空 = 流程刚起跑。**不复用 context.pages[0]**：
+        # 那可能是上次失败残留的半路页面（脏表单 / 旧弹层 / 别人的页），
+        # 每次流程都从一张干净页开始，归属也清楚（_OWNED_PAGES）。
+        page = await _new_page(context)
 
     ctx.page = page
+    return page
+
+
+#: 本进程自己 new_page 出来的页（id(page)）。页数淘汰只碰这些，
+#: 绝不碰用户手开的标签或另一个进程的页。
+_OWNED_PAGES: set[int] = set()
+
+
+async def _new_page(context: Any) -> Any:
+    """新开一页并登记归属，供淘汰逻辑识别"这是我们自己的页"。"""
+    page = await context.new_page()
+    _OWNED_PAGES.add(id(page))
     return page
 
 
@@ -785,10 +805,28 @@ async def web_attach(args: dict[str, Any], ctx: ExecutionContext) -> Result:
 @register("web_close")
 @_guard
 async def web_close(args: dict[str, Any], ctx: ExecutionContext) -> Result:
-    """args: {kind=page|all}"""
-    page = _page(ctx)
+    """args: {kind=page|all}
+
+    kind=all 对**接管来的浏览器**（Ant 指纹浏览器）只关本进程自己开的页：
+    绝不 browser.close() / pw.stop() —— 那会把用户正在用的整个窗口关掉。
+    """
     kind = args.get("kind", "page")
 
+    if kind == "all" and getattr(ctx, "_ant_owned", False):
+        closed = 0
+        for p in _all_pages(ctx):
+            if id(p) not in _OWNED_PAGES:
+                continue                      # 用户/别的进程的标签页，一律不动
+            try:
+                await p.close()
+                _OWNED_PAGES.discard(id(p))
+                closed += 1
+            except Exception:  # noqa: BLE001 - 关不掉也不该中断收尾
+                pass
+        ctx.page = None
+        return Result.done(f"已关闭自有页面 {closed} 个（浏览器是接管的，保留）")
+
+    page = _page(ctx)
     pages = _all_pages(ctx)
     if kind == "all":
         for p in pages:
@@ -841,13 +879,20 @@ async def web_tab(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         chosen = pages[index]
     else:
         pattern = _text(ctx, args, "title" if kind == "title" else "url", "") or ""
+        prefer = str(args.get("prefer") or "latest").lower()
+        hits: list[tuple[int, Any]] = []
         for i, page in enumerate(pages):
             hay = await _title_of(page) if kind == "title" else str(getattr(page, "url", "") or "")
             if _match(hay, pattern, match):
-                chosen, index = page, i
-                break
-        if chosen is None:
+                hits.append((i, page))
+        if not hits:
             return Result.fail(f"未找到标签页（{kind}={pattern}）")
+        # 默认取**最新的**匹配：同样是「商品发布」，新开的标签在 pages 末尾，
+        # 取第一个会撞上历史残留标签（实测导致流程切到三天前的填表页）。
+        if prefer in ("first", "oldest"):
+            index, chosen = hits[0]
+        else:
+            index, chosen = hits[-1]
 
     ctx.page = chosen
     frames = getattr(ctx, "frames", None)

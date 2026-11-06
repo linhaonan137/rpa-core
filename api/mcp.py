@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -38,6 +39,9 @@ _ctx = ExecutionContext(run_id="mcp")
 # 为什么不放 _ctx 上：flow_run 内部会新建 ExecutionContext（run_id 要唯一），
 # 新 ctx 没有 browser，`_ensure_page` 就会再 launch 一个 —— 每次跑流程多一个浏览器进程。
 _SHARED_BROWSER: dict[str, Any] = {}
+#: 冷启动时两个请求同时进来会各自 connect/launch（泄漏一只浏览器），
+#: 无锁 dict 还会让 A 读到 B 清空后的 KeyError -> HTTP 500。
+_BROWSER_LOCK = asyncio.Lock()
 
 
 def _last_cdp() -> str:
@@ -65,6 +69,12 @@ def _remember_cdp(cdp: str) -> None:
 
 
 async def _attach_shared_browser(ctx: ExecutionContext) -> None:
+    """挂共享浏览器（加锁：冷启动并发时只允许一个请求去 connect / launch）。"""
+    async with _BROWSER_LOCK:
+        await _attach_shared_browser_locked(ctx)
+
+
+async def _attach_shared_browser_locked(ctx: ExecutionContext) -> None:
     """把进程级共享浏览器挂到给定 ctx 上。
 
     复用优先级（用户要求：只要当前登录态浏览器活着，就绝不新开）：
@@ -120,7 +130,8 @@ async def _attach_shared_browser(ctx: ExecutionContext) -> None:
             browser = await pw.chromium.connect_over_cdp(cdp, timeout=15_000)
             contexts = list(getattr(browser, "contexts", None) or [])
             context = contexts[0] if contexts else await browser.new_context()
-        except Exception as exc:  # noqa: BLE001 - 浏览器没开就连不上，落回 launch
+        except Exception as exc:  # noqa: BLE001 - 浏览器没开就连不上
+            ctx.log("warn", f"CDP 接管失败 {cdp}: {type(exc).__name__}: {exc}")
             cdp = ""
         else:
             setattr(ctx, "_ant_owned", True)
@@ -129,7 +140,15 @@ async def _attach_shared_browser(ctx: ExecutionContext) -> None:
             ctx.browser_context = _SHARED_BROWSER["context"]
             return
 
-    # ④ 最后手段：launch
+    # ④ 最后手段：launch（默认**禁止**）
+    # 用户要求：只要当前登录态浏览器活着就绝不新开。接管的浏览器不可达时
+    # 先报明确错误，而不是静默换成一只没有登录态的新浏览器 —— 那只会把
+    # "登录态丢失"伪装成"元素超时"。确需自建时显式设 RPA_ALLOW_LAUNCH=1。
+    if (os.getenv("RPA_ALLOW_LAUNCH") or "").strip() not in ("1", "true", "True"):
+        raise RuntimeError(
+            "接管的浏览器不可达（RPA_CDP / out/_last_cdp.txt 都没连上），且未允许自建浏览器。"
+            "请确认 Ant 已启动、CDP 端口正确；确需自建请设 RPA_ALLOW_LAUNCH=1。"
+        )
     from engine import stealth
     from nodes.web import _default_headless, _open_browser
 
@@ -334,7 +353,7 @@ async def web_open(
         if page is None:
             return {"ok": False, "error": "reuse 需要有已打开的页面；没有页面请用 kind=new + url"}
         return {"ok": True, "message": "复用当前页面", "data": {"url": str(getattr(page, "url", ""))}}
-    return await _call("web_open", {"url": url, "until": until, "limit_ms": limit_ms})
+    return await _call("web_open", {"url": url, "kind": "new_tab", "until": until, "limit_ms": limit_ms})
 
 
 @mcp.tool

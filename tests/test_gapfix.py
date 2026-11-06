@@ -207,10 +207,11 @@ async def test_attach_clears_dead_ref_and_uses_recorded_cdp(monkeypatch):
 
 
 async def test_attach_launches_only_when_everything_dead(monkeypatch):
-    """死引用 + 无缓存 + 无端点：launch 是最后手段。"""
+    """死引用 + 无缓存 + 无端点：launch 是最后手段（且必须显式允许）。"""
     monkeypatch.setattr(mcp_mod._ctx, "page", None)
     monkeypatch.setattr(mcp_mod, "_SHARED_BROWSER", {})
     monkeypatch.setenv("RPA_CDP", "")
+    monkeypatch.setenv("RPA_ALLOW_LAUNCH", "1")   # 显式允许自建
     monkeypatch.setattr(mcp_mod, "_last_cdp", lambda: "")
 
     new_bctx = MagicMock()
@@ -224,3 +225,21 @@ async def test_attach_launches_only_when_everything_dead(monkeypatch):
     await mcp_mod._attach_shared_browser(ctx)
 
     assert ctx.browser_context is new_bctx
+
+
+async def test_attach_refuses_launch_without_explicit_flag(monkeypatch):
+    """默认禁止自建浏览器：接管不可达就报错，绝不静默换成没有登录态的新浏览器。"""
+    monkeypatch.setattr(mcp_mod._ctx, "page", None)
+    monkeypatch.setattr(mcp_mod, "_SHARED_BROWSER", {})
+    monkeypatch.setenv("RPA_CDP", "")
+    monkeypatch.delenv("RPA_ALLOW_LAUNCH", raising=False)
+    monkeypatch.setattr(mcp_mod, "_last_cdp", lambda: "")
+
+    async def must_not_launch(*args, **kwargs):  # noqa: ANN001
+        raise AssertionError("未允许时不该 launch")
+
+    monkeypatch.setattr(web, "_open_browser", must_not_launch)
+
+    ctx = ExecutionContext()
+    with pytest.raises(RuntimeError, match="RPA_ALLOW_LAUNCH"):
+        await mcp_mod._attach_shared_browser(ctx)

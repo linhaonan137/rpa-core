@@ -303,11 +303,17 @@ def create_app(
         from api.mcp import _SHARED_BROWSER
 
         context = _SHARED_BROWSER.get("context")
-        if context is not None:
-            try:
-                await context.close()
-            except Exception:  # noqa: BLE001 - 关闭失败不影响退出
-                pass
+        if context is None:
+            return
+        # 接管来的浏览器（CDP attach / 复用 _ctx）不归我们管：
+        # context.close() 对 CDP 默认 context 会退化成"断整个连接"，
+        # cookie 也不会因此落盘（profile 由 Ant 自己管）。只有自己 launch 的才关。
+        if _SHARED_BROWSER.get("cdp") or _SHARED_BROWSER.get("_pw") is None:
+            return
+        try:
+            await context.close()
+        except Exception:  # noqa: BLE001 - 关闭失败不影响退出
+            pass
 
     return app
 

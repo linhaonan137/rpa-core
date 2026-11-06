@@ -163,6 +163,33 @@ web_click(div.image-empty)                        打开「选择图片」弹层
 - HTTP `/run` 默认关掉本次新开的标签（防泄漏）；交互探索用 `?keep_pages=1` 保留结果页
 - MCP `flow_run` 优先复用 `web_open(kind=attach)` 接管的浏览器；没设 `RPA_CDP` 也不会 launch 无登录态新浏览器
 
+### 3.10 环境治理（2026-11-06 修复）
+
+"每次起跑环境不一样"是失败率的主因（占历史失败约 45%）。已修 8 项：
+
+| 问题 | 修法 |
+|---|---|
+| `_ensure_page` 复用 `pages[0]`（可能是上次失败残留的脏页）| ctx.page 为空时**新开一页**，流程永远从干净页开始 |
+| 页面淘汰按最老关 → 会关掉用户/别的进程正在用的标签 | 只关**本进程 `new_page` 出来的页**（`_OWNED_PAGES` 登记），且跳过当前页 |
+| `web_close(kind=all)` 不区分归属 → 会关掉用户接管的 Ant | `_ant_owned` 时只关自有页，绝不 `browser.close()` / `pw.stop()` |
+| HTTP 服务 shutdown 无条件 `context.close()` | CDP 接管的不关（对默认 context 会断整个连接）|
+| `web_tab` 首个命中即用 → 切到历史同名标签 | 新增 `prefer`，**默认 latest**（取最新匹配）；`prefer=first/oldest` 可回退 |
+| `_SHARED_BROWSER` 无锁 → 冷启动并发双 connect、KeyError 500 | `asyncio.Lock` 包住 attach |
+| 接管失败静默 launch 无登录态新浏览器 | **默认禁止**，需显式 `RPA_ALLOW_LAUNCH=1`；CDP 失败写 warn 日志 |
+| MCP `web_open(kind=new)` 没把 kind 传给节点 → 退化成复用当前页 | 显式传 `new_tab` |
+
+实测：连跑 3 次 **38.6 / 36.3 / 36.3s 全绿**，且**每次跑完标签数 1→1**（不再累积残留）。
+
+**仍未处理（结构性，需单独排期）**：
+
+| 缺口 | 说明 |
+|---|---|
+| 跨进程互斥 | HTTP 服务与 MCP 服务是两个进程，各连一只 Ant，无租约/文件锁；同时跑会抢同一页 |
+| `/run` 未入队列 | 同步 `/run` 绕开 task_queue，同进程并发仍可能抢页（`/run-async` 才排队）|
+| `_MAX_PAGES_PER_CONTEXT` 无 LRU | 现在只关自有页，够用但不够精确 |
+| `_save_failure` 用 `_ctx.page` | 应取本次 run 的 ctx.page，否则现场可能截错页 |
+| `_attach_cdp` 已连接时返回假 ok | 会让调用方把"从未连上的端点"写成"上次端点" |
+
 ## 4. 填表页字段地图（实测）
 
 ```
