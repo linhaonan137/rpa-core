@@ -180,15 +180,16 @@ web_click(div.image-empty)                        打开「选择图片」弹层
 
 实测：连跑 3 次 **38.6 / 36.3 / 36.3s 全绿**，且**每次跑完标签数 1→1**（不再累积残留）。
 
-**仍未处理（结构性，需单独排期）**：
+**第二批环境治理（13:35 补修 4 项）**：
 
-| 缺口 | 说明 |
+| 缺口 | 修法 |
 |---|---|
-| 跨进程互斥 | HTTP 服务与 MCP 服务是两个进程，各连一只 Ant，无租约/文件锁；同时跑会抢同一页 |
-| `/run` 未入队列 | 同步 `/run` 绕开 task_queue，同进程并发仍可能抢页（`/run-async` 才排队）|
-| `_MAX_PAGES_PER_CONTEXT` 无 LRU | 现在只关自有页，够用但不够精确 |
-| `_save_failure` 用 `_ctx.page` | 应取本次 run 的 ctx.page，否则现场可能截错页 |
-| `_attach_cdp` 已连接时返回假 ok | 会让调用方把"从未连上的端点"写成"上次端点" |
+| 跨进程互斥（HTTP 服务 + MCP 服务共用一个 Ant）| 新增 `engine/browser_lock.py`：OS 文件锁（Windows `msvcrt` / POSIX `fcntl`）+ 异步轮询等待，超时抛 `BrowserBusy`。`/run` 返回 **409**，`flow_run` 返回明确错误。`RPA_BROWSER_LOCK=off` 可关 |
+| `/run` 未入队列 | 与上一项同解：锁是跨进程租约，比进程内队列更彻底，`/run` 不必改建队列 |
+| `_save_failure` 用 `_ctx.page` | 改签名收 `page=ctx.page`（本次 run 的页面），现场不再截错页 |
+| `_attach_cdp` 已连接时返回假 ok | 返回 `data.reused`；调用方只在**本次真连上**时才写 `_last_cdp.txt`，脏端点不再被持久化 |
+
+**仅剩一项不修**：`_MAX_PAGES_PER_CONTEXT` 没有 LRU 淘汰 —— 现在只关本进程自有页、上限 3，够用；做 LRU 收益小于改动风险。
 
 ## 4. 填表页字段地图（实测）
 

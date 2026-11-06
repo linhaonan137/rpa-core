@@ -337,8 +337,10 @@ async def web_open(
         if cdp:
             a["cdp"] = cdp
         r = await _call("web_attach", a)
-        if r.get("ok") and cdp:
-            # 记住端点：MCP 服务重启后 flow_run 也能自动找回同一只登录态浏览器
+        reused = bool((r.get("data") or {}).get("reused"))
+        if r.get("ok") and cdp and not reused:
+            # 只有**这次真的连上**才记端点；复用旧连接时写入会把脏端点持久化，
+            # 下次启动拿着它白等 15s 再降级
             _remember_cdp(cdp)
         return r
     if kind == "reuse":
@@ -1736,7 +1738,14 @@ async def flow_run(
 
     opts = RunOptions(start_at=start_at or None, max_steps=limit_steps)
     try:
-        result = await Runner(f, ctx, opts).execute()
+        from engine.browser_lock import BrowserBusy, browser_lock
+
+        try:
+            # 跨进程独占（HTTP 服务 / 另一个 MCP 调用同时用浏览器时排队）
+            async with browser_lock():
+                result = await Runner(f, ctx, opts).execute()
+        except BrowserBusy as exc:
+            return {"ok": False, "error": f"浏览器被占用: {exc}"}
     except KeyError as exc:
         # start_at 指向不存在的节点等配置错误：原来裸抛 KeyError，Agent 的通用
         # 错误处理接不住（协议层异常而不是 ok:false）
@@ -1758,7 +1767,7 @@ async def flow_run(
     # 失败时存现场（DOM 摘要 + 表单字段 + 截图），供 read_failure 回看
     if not result["ok"]:
         try:
-            await _save_failure(run_id, f.name, result)
+            await _save_failure(run_id, f.name, result, page=ctx.page)
         except Exception:  # noqa: BLE001 - 存现场失败不该影响主结果
             pass
 
@@ -1781,14 +1790,20 @@ async def flow_run(
 FAILURES_DIR = FLOWS_DIR.parent / "out" / "failures"
 
 
-async def _save_failure(run_id: str, flow_name: str, result: dict[str, Any]) -> str:
+async def _save_failure(
+    run_id: str, flow_name: str, result: dict[str, Any], page: Any = None
+) -> str:
     """把失败现场存下来：页面状态 + 可交互元素 + 表单字段 + 每个节点的错误。
 
     为什么要存「现场」而不是只存错误信息：
     流程失败时页面往往是"半成品状态"（已经填了一半、弹窗开着），
     光看 "web_click 超时" 根本不知道当时页面上有什么。
+
+    page：**本次 run 的页面**（不是模块级 _ctx.page —— 那可能是别的会话的页，
+    截出来的现场会误导排查）。
     """
-    page = getattr(_ctx, "page", None)
+    if page is None:
+        page = getattr(_ctx, "page", None)
     snap: dict[str, Any] = {
         "run_id": run_id,
         "flow": flow_name,

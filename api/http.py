@@ -151,12 +151,19 @@ def create_app(
             if not ctx.has_var(var.name):  # body 传的优先
                 ctx.set_var(var.name, var.value, scope="global")
 
+        from engine.browser_lock import BrowserBusy, browser_lock
+
         context = await _attach_shared(ctx)
         pages_before = list(getattr(context, "pages", None) or [])
         try:
-            result = await Runner(flow, ctx, RunOptions()).execute()
+            # 跨进程独占：MCP 服务 / 另一个并发请求正在用这只浏览器时排队等。
+            # 不加锁两边会抢同一个标签页（互相导航、互相关页 → 随机"元素找不到"）。
+            async with browser_lock():
+                result = await Runner(flow, ctx, RunOptions()).execute()
         except ContextError as exc:
             raise HTTPException(400, f"上下文错误: {exc}") from exc
+        except BrowserBusy as exc:
+            raise HTTPException(409, str(exc)) from exc
         finally:
             # 关掉本次请求新开的标签页：复用浏览器但别让标签越积越多。
             # keep_pages=1 时不关 —— 交互探索要看到流程最后停在哪个页面。

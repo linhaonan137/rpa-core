@@ -719,7 +719,10 @@ async def _attach_cdp(ctx: ExecutionContext, cdp_url: str = "http://127.0.0.1:92
     from playwright.async_api import async_playwright
 
     if getattr(ctx, "browser", None) is not None:
-        return ctx.page  # 已接管/已启动，不重复连
+        # 已接管/已启动：标出"复用"，调用方就不会把这个 cdp 当成
+        # "这次真的连上的端点"写进 _last_cdp.txt（否则污染下次连接）
+        setattr(ctx, "_cdp_reused", True)
+        return ctx.page  # 不重复连
 
     pw = await async_playwright().start()
     try:
@@ -763,6 +766,7 @@ async def web_attach(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     cdp = _text(ctx, args, "cdp", "") or ""
 
     if cdp:
+        setattr(ctx, "_cdp_reused", False)   # 只在本次真的新连上时才为 False
         await _attach_cdp(ctx, cdp)
         # 记住 CDP 地址：录制器要靠它给流程补"前置 attach 节点"，
         # 否则录出来的流程第一条就是操作，跑的时候没有页面可操作
@@ -799,7 +803,14 @@ async def web_attach(args: dict[str, Any], ctx: ExecutionContext) -> Result:
             return Result.fail(f"navigate=True 需要完整 URL（http/https 开头），收到 {url!r}")
         await chosen.goto(url, wait_until=args.get("wait_until", "load"), timeout=limit)
 
-    return Result.done(f"已接管第 {index} 个页面", data={"index": index, "url": str(getattr(chosen, "url", ""))})
+    return Result.done(
+        f"已接管第 {index} 个页面",
+        data={
+            "index": index,
+            "url": str(getattr(chosen, "url", "")),
+            "reused": bool(getattr(ctx, "_cdp_reused", False)),
+        },
+    )
 
 
 @register("web_close")

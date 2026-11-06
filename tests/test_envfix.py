@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 import nodes.web as web
 from engine.context import ExecutionContext
 
@@ -123,3 +125,52 @@ async def test_ensure_page_opens_fresh_page_instead_of_reusing_pages0(monkeypatc
     assert page is not dirty
     context.new_page.assert_awaited_once()
     assert ctx.page is fresh
+
+
+# ---------------------------------------------------------------- 跨进程浏览器锁
+
+
+async def test_browser_lock_is_exclusive_and_releases(monkeypatch, tmp_path):
+    """同一时刻只允许一个持有者；超时抛 BrowserBusy；释放后可再次获取。"""
+    from engine import browser_lock as bl
+
+    monkeypatch.setattr(bl, "_lock_path", lambda: tmp_path / ".browser.lock")
+    monkeypatch.delenv("RPA_BROWSER_LOCK", raising=False)
+
+    holder = bl.browser_lock(timeout_s=2)
+    async with holder:
+        with pytest.raises(bl.BrowserBusy):
+            async with bl.browser_lock(timeout_s=0.2, poll_s=0.05):
+                pass
+
+    # 释放后能重新拿到
+    async with bl.browser_lock(timeout_s=2):
+        pass
+
+
+async def test_browser_lock_can_be_disabled(monkeypatch, tmp_path):
+    """RPA_BROWSER_LOCK=off 时不做互斥（单进程调试用）。"""
+    from engine import browser_lock as bl
+
+    monkeypatch.setattr(bl, "_lock_path", lambda: tmp_path / ".browser.lock")
+    monkeypatch.setenv("RPA_BROWSER_LOCK", "off")
+
+    async with bl.browser_lock():
+        async with bl.browser_lock():   # 关掉后嵌套也不报错
+            pass
+
+
+# ---------------------------------------------------------------- 端点不被污染
+
+
+async def test_attach_marks_reused_so_caller_does_not_persist_cdp():
+    """已连接时 attach 只标 reused，不重复 connect（调用方据此不写端点文件）。"""
+    ctx = ExecutionContext(page=None, elements={})
+    ctx.browser = MagicMock()
+    page = _Page("当前页")
+    ctx.page = page
+
+    got = await web._attach_cdp(ctx, "http://127.0.0.1:1")
+
+    assert got is page
+    assert getattr(ctx, "_cdp_reused", False) is True
