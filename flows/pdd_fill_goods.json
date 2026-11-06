@@ -1,0 +1,318 @@
+{
+  "name": "拼多多完善商品信息：字段填全（goods_add 页，状态等待）",
+  "version": 1,
+  "nodes": [
+    {
+      "type": "web_open",
+      "label": "触发平台草稿恢复（会跳回 goods_add）",
+      "args": {
+        "url": "https://mms.pinduoduo.com/goods/category",
+        "until": "dom",
+        "jitter": [
+          500,
+          900
+        ]
+      },
+      "id": "n1"
+    },
+    {
+      "type": "web_tab",
+      "label": "切到 goods_add 页",
+      "args": {
+        "kind": "url",
+        "url": "goods_add",
+        "prefer": "latest"
+      },
+      "id": "n2"
+    },
+    {
+      "id": "n3",
+      "type": "web_js",
+      "label": "前置：确认在 goods_add 页 + 关掉残留浮层",
+      "args": {
+        "code": "() => { if (location.href.indexOf('goods_add') < 0) { throw new Error('当前不是 goods_add 页: ' + location.href.slice(0,80)); } document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return 'ok ' + location.href.slice(0,70); }"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "web_js",
+      "label": "给所有目标控件打稳定标记",
+      "args": {
+        "code": "() => { const brand = document.querySelector('input[placeholder*=\"品牌名称\"]'); if (brand) brand.setAttribute('data-rpa-brand','1'); const wrap = [...document.querySelectorAll('[class*=TB_tableWrapper]')].find(w => (w.innerText||'').indexOf('*库存') >= 0); const row = wrap && [...wrap.querySelectorAll('tr,[class*=tr]')].find(r => r.querySelectorAll('input[placeholder=\"请输入\"]').length >= 3); if (row) { [...row.querySelectorAll('input[placeholder=\"请输入\"]')].forEach((e,i) => e.setAttribute('data-rpa-sku', String(i))); } const ref = document.querySelector('input[placeholder*=\"应大于商品最大单买价\"]'); if (ref) ref.setAttribute('data-rpa-ref','1'); const disc = document.querySelector('input[placeholder*=\"5.0~9.9\"]'); if (disc) disc.setAttribute('data-rpa-disc','1'); [...document.querySelectorAll('input[type=file]')].forEach((e,i) => e.setAttribute('data-rpa-file', String(i))); return { brand: !!brand, sku: row ? row.querySelectorAll('input[placeholder=\"请输入\"]').length : 0, files: document.querySelectorAll('input[type=file]').length }; }"
+      }
+    },
+    {
+      "id": "n5",
+      "type": "web_js",
+      "label": "批量填所有「请选择」下拉（各选第一项）",
+      "args": {
+        "code": "async () => { const sleep = (ms) => new Promise(r => setTimeout(r, ms)); const out = []; for (let round = 0; round < 8; round++) { const empties = [...document.querySelectorAll('input[placeholder=\"请选择\"]')].filter(e => !(e.value||'').trim()); if (!empties.length) break; const inp = empties[0]; inp.click(); await sleep(500); const ul = document.querySelector('ul[class*=dropdownPanel]'); const first = ul ? ul.querySelector('li[class*=cIL_item]') : null; if (!first) { inp.setAttribute('data-rpa-noopt','1'); break; } const pick = (first.innerText||'').trim().slice(0,14); first.click(); await sleep(400); out.push(pick); document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); await sleep(200); } return { 选中: out }; }"
+      }
+    },
+    {
+      "id": "n6",
+      "type": "web_type",
+      "label": "SKU 库存",
+      "args": {
+        "target": "[data-rpa-sku=\"0\"]",
+        "text": "{库存}",
+        "kind": "type",
+        "clear": true,
+        "delay_ms": 60
+      }
+    },
+    {
+      "id": "n7",
+      "type": "web_type",
+      "label": "SKU 拼单价",
+      "args": {
+        "target": "[data-rpa-sku=\"1\"]",
+        "text": "{拼单价}",
+        "kind": "type",
+        "clear": true,
+        "delay_ms": 60
+      }
+    },
+    {
+      "id": "n8",
+      "type": "web_type",
+      "label": "SKU 单买价（必须比拼单价高1元）",
+      "args": {
+        "target": "[data-rpa-sku=\"2\"]",
+        "text": "{单买价}",
+        "kind": "type",
+        "clear": true,
+        "delay_ms": 60
+      }
+    },
+    {
+      "id": "n9",
+      "type": "web_type",
+      "label": "SKU 规格编码",
+      "args": {
+        "target": "[data-rpa-sku=\"3\"]",
+        "text": "{规格编码}",
+        "kind": "type",
+        "clear": true,
+        "delay_ms": 50
+      }
+    },
+    {
+      "id": "n10",
+      "type": "web_type",
+      "label": "SKU 商品编码",
+      "args": {
+        "target": "[data-rpa-sku=\"4\"]",
+        "text": "{商品编码}",
+        "kind": "type",
+        "clear": true,
+        "delay_ms": 50
+      }
+    },
+    {
+      "id": "n11",
+      "type": "web_type",
+      "label": "商品参考价（应大于最大单买价）",
+      "args": {
+        "target": "[data-rpa-ref=\"1\"]",
+        "text": "{参考价}",
+        "kind": "type",
+        "clear": true,
+        "delay_ms": 60
+      }
+    },
+    {
+      "id": "n12",
+      "type": "web_type",
+      "label": "满件折扣",
+      "args": {
+        "target": "[data-rpa-disc=\"1\"]",
+        "text": "{折扣}",
+        "kind": "type",
+        "clear": true,
+        "delay_ms": 60
+      }
+    },
+    {
+      "id": "n13",
+      "type": "web_upload",
+      "label": "白底图",
+      "args": {
+        "target": "[data-rpa-file=\"1\"]",
+        "path": "{白底图}"
+      }
+    },
+    {
+      "id": "n14",
+      "type": "web_upload",
+      "label": "包装标签图",
+      "args": {
+        "target": "[data-rpa-file=\"2\"]",
+        "path": "{标签图}"
+      }
+    },
+    {
+      "type": "web_js",
+      "label": "重定位详情图 file input（不依赖旧标记）",
+      "args": {
+        "code": "() => { const files = [...document.querySelectorAll('input[type=file]')]; const detail = files.find(e => { let p = e.parentElement, t = ''; for (let k = 0; k < 5 && p; k++) { t += (p.innerText||'') + ' '; p = p.parentElement; } return t.indexOf('50张') >= 0 || t.indexOf('快捷编辑') >= 0; }); if (detail) detail.setAttribute('data-rpa-detail','1'); return { 找到: !!detail, 文件框数: files.length }; }"
+      },
+      "id": "n15"
+    },
+    {
+      "id": "n16",
+      "type": "web_upload",
+      "label": "商品详情图",
+      "args": {
+        "target": "[data-rpa-detail=\"1\"]",
+        "path": "{详情图}"
+      }
+    },
+    {
+      "id": "n17",
+      "type": "web_js",
+      "label": "勾售后（7天无理由 / 假一赔十）",
+      "args": {
+        "code": "() => { const out = []; [...document.querySelectorAll('input[type=checkbox]')].forEach((c,i) => { if (!c.checked) { c.click(); out.push(i); } }); return { 已勾: out }; }"
+      }
+    },
+    {
+      "id": "n18",
+      "type": "web_js",
+      "label": "末尾断言：错误0 + 字段清单",
+      "args": {
+        "code": "async () => { const sleep = (ms) => new Promise(r => setTimeout(r, ms)); for (let i = 0; i < 30; i++) { const t = document.body.innerText.replace(/\\s+/g,' '); const err = (t.match(/错误（(\\d+)）/)||[])[1]; const rate = (t.match(/填写率\\s*(\\d+)%/)||[])[1]; const sku = [0,1,2,3,4].map(k => { const e = document.querySelector('[data-rpa-sku=\"'+k+'\"]'); return e ? e.value : ''; }); if (err === '0' && sku.every(v => v)) { return { 错误: err, 属性填写率: rate, SKU: sku, 轮播图: (t.match(/已上传(\\d+)\\/10张/)||[])[1], 详情图: (t.match(/已上传(\\d+)\\/50张/)||[])[1], 品牌: (document.querySelector('input[placeholder*=\"品牌名称\"]')||{}).value || '(平台品牌库，无匹配)' }; } await sleep(300); } throw new Error('状态未达标: ' + document.body.innerText.slice(0,180)); }",
+        "save_as": "pdd_goods_state"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "id": "e2",
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "id": "e3",
+      "from": "n3",
+      "to": "n4"
+    },
+    {
+      "id": "e4",
+      "from": "n4",
+      "to": "n5"
+    },
+    {
+      "id": "e5",
+      "from": "n5",
+      "to": "n6"
+    },
+    {
+      "id": "e6",
+      "from": "n6",
+      "to": "n7"
+    },
+    {
+      "id": "e7",
+      "from": "n7",
+      "to": "n8"
+    },
+    {
+      "id": "e8",
+      "from": "n8",
+      "to": "n9"
+    },
+    {
+      "id": "e9",
+      "from": "n9",
+      "to": "n10"
+    },
+    {
+      "id": "e10",
+      "from": "n10",
+      "to": "n11"
+    },
+    {
+      "id": "e11",
+      "from": "n11",
+      "to": "n12"
+    },
+    {
+      "id": "e12",
+      "from": "n12",
+      "to": "n13"
+    },
+    {
+      "id": "e13",
+      "from": "n13",
+      "to": "n14"
+    },
+    {
+      "id": "e14",
+      "from": "n14",
+      "to": "n15"
+    },
+    {
+      "id": "e15",
+      "from": "n15",
+      "to": "n16"
+    },
+    {
+      "id": "e16",
+      "from": "n16",
+      "to": "n17"
+    },
+    {
+      "id": "e17",
+      "from": "n17",
+      "to": "n18"
+    }
+  ],
+  "vars": [
+    {
+      "name": "库存",
+      "value": "100"
+    },
+    {
+      "name": "拼单价",
+      "value": "99"
+    },
+    {
+      "name": "单买价",
+      "value": "109"
+    },
+    {
+      "name": "规格编码",
+      "value": "TEST-SKU-001"
+    },
+    {
+      "name": "商品编码",
+      "value": "TEST-GOODS-001"
+    },
+    {
+      "name": "参考价",
+      "value": "110"
+    },
+    {
+      "name": "折扣",
+      "value": "9.9"
+    },
+    {
+      "name": "白底图",
+      "value": "F:\\workspace\\projects\\rpa\\assets\\main\\main_02.png"
+    },
+    {
+      "name": "标签图",
+      "value": "F:\\workspace\\projects\\rpa\\assets\\main\\main_03.png"
+    },
+    {
+      "name": "详情图",
+      "value": "F:\\workspace\\projects\\rpa\\assets\\main\\main_04.png"
+    }
+  ]
+}
