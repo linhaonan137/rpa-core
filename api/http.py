@@ -124,7 +124,12 @@ def create_app(
         return {"ok": True, "flows": items}
 
     @app.post("/run/{name}")
-    async def run_flow(name: str, request: Request) -> JSONResponse:
+    async def run_flow(name: str, request: Request, keep_pages: bool = False) -> JSONResponse:
+        """跑一个流程。
+
+        `?keep_pages=1` 保留本次新开的标签页 —— 交互探索时要看结果页；
+        默认关掉（n8n 无人跑，不关就积标签）。
+        """
         _check(request)
         flow = _load(name)
 
@@ -153,13 +158,15 @@ def create_app(
         except ContextError as exc:
             raise HTTPException(400, f"上下文错误: {exc}") from exc
         finally:
-            # 关掉本次请求新开的标签页：复用浏览器但别让标签越积越多
-            for _p in list(getattr(context, "pages", None) or []):
-                if _p not in pages_before:
-                    try:
-                        await _p.close()
-                    except Exception:  # noqa: BLE001
-                        pass
+            # 关掉本次请求新开的标签页：复用浏览器但别让标签越积越多。
+            # keep_pages=1 时不关 —— 交互探索要看到流程最后停在哪个页面。
+            if not keep_pages:
+                for _p in list(getattr(context, "pages", None) or []):
+                    if _p not in pages_before:
+                        try:
+                            await _p.close()
+                        except Exception:  # noqa: BLE001
+                            pass
 
         db.save_run(
             run_id,
