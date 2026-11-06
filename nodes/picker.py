@@ -89,8 +89,10 @@ async def web_pick(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     exact = bool(args.get("exact", True))
     key = args.get("key")
     allow_first = bool(args.get("allow_first", False))
-    desc = str(selector or target or (f"role={role}[name={name}]" if role else ""))
-    if not selector and not target and not (role and name):
+    anchor_label = str(args.get("anchor_label") or "").strip()
+    desc = str(selector or target or anchor_label and f"anchor_label={anchor_label}"
+               or (f"role={role}[name={name}]" if role else ""))
+    if not selector and not target and not anchor_label and not (role and name):
         return Result.fail("web_pick: 缺 selector / target / role+name")
     if not key:
         return Result.fail("web_pick: 缺 key")
@@ -99,7 +101,26 @@ async def web_pick(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     store = ElementStore(path)
     matched = 0
     try:
-        if role and name:
+        if anchor_label:
+            # 同构表单字段：先按精确文本找 label，再往上找含 input 的最近容器。
+            # 单个 CSS 做不到（:has-text 是子串、会匹配祖先，实测 14 个候选）。
+            lab = ctx.page.get_by_text(anchor_label, exact=True)
+            if await lab.count() == 0:
+                return Result.fail(f"web_pick: 找不到字段名 {anchor_label!r}")
+            box = lab.locator("xpath=ancestor::*[.//input][1]")
+            loc = box.locator("input")
+            matched = await loc.count()
+            if matched == 0:
+                return Result.fail(f"web_pick: 字段 {anchor_label!r} 的容器里没有 input")
+            if matched > 1 and not allow_first:
+                return _ambiguous(matched, str(key), desc)
+            entry = await capture(
+                ctx.page, None, str(key), store=store, save=False,
+                frame_chain=args.get("frame_chain"),
+                limit_ms=int(args.get("limit_ms", 10_000)),
+                locator=loc.first,
+            )
+        elif role and name:
             # 精确优先（避免子串撞长文本），没有再放宽
             loc = ctx.page.get_by_role(role, name=name, exact=exact)
             if exact and await loc.count() == 0:

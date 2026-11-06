@@ -447,20 +447,16 @@
       "id": "n27"
     },
     {
-      "type": "web_click",
-      "label": "主图1：点容器外确认",
+      "type": "web_key",
+      "label": "主图：Escape 关弹层（不依赖文本）",
       "args": {
-        "target": "text=基础上传要求",
-        "limit_ms": 6000,
+        "key": "Escape",
         "jitter": [
-          400,
-          800
+          200,
+          400
         ]
       },
-      "id": "n28",
-      "on_fail": {
-        "mode": "skip"
-      }
+      "id": "n28"
     },
     {
       "type": "web_click",
@@ -556,20 +552,16 @@
       "id": "n36"
     },
     {
-      "type": "web_click",
-      "label": "主图2：点容器外确认",
+      "type": "web_key",
+      "label": "主图：Escape 关弹层（不依赖文本）",
       "args": {
-        "target": "text=基础上传要求",
-        "limit_ms": 6000,
+        "key": "Escape",
         "jitter": [
-          400,
-          800
+          200,
+          400
         ]
       },
-      "id": "n37",
-      "on_fail": {
-        "mode": "skip"
-      }
+      "id": "n37"
     },
     {
       "type": "web_click",
@@ -665,20 +657,16 @@
       "id": "n45"
     },
     {
-      "type": "web_click",
-      "label": "主图3：点容器外确认",
+      "type": "web_key",
+      "label": "主图：Escape 关弹层（不依赖文本）",
       "args": {
-        "target": "text=基础上传要求",
-        "limit_ms": 6000,
+        "key": "Escape",
         "jitter": [
-          400,
-          800
+          200,
+          400
         ]
       },
-      "id": "n46",
-      "on_fail": {
-        "mode": "skip"
-      }
+      "id": "n46"
     },
     {
       "type": "web_click",
@@ -774,20 +762,16 @@
       "id": "n54"
     },
     {
-      "type": "web_click",
-      "label": "主图4：点容器外确认",
+      "type": "web_key",
+      "label": "主图：Escape 关弹层（不依赖文本）",
       "args": {
-        "target": "text=基础上传要求",
-        "limit_ms": 6000,
+        "key": "Escape",
         "jitter": [
-          400,
-          800
+          200,
+          400
         ]
       },
-      "id": "n55",
-      "on_fail": {
-        "mode": "skip"
-      }
+      "id": "n55"
     },
     {
       "type": "web_click",
@@ -883,160 +867,69 @@
       "id": "n63"
     },
     {
-      "type": "web_click",
-      "label": "主图5：点容器外确认",
+      "type": "web_key",
+      "label": "主图：Escape 关弹层（不依赖文本）",
       "args": {
-        "target": "text=基础上传要求",
-        "limit_ms": 6000,
+        "key": "Escape",
         "jitter": [
-          400,
-          800
+          200,
+          400
         ]
       },
-      "id": "n64",
-      "on_fail": {
-        "mode": "skip"
-      }
+      "id": "n64"
     },
     {
-      "type": "web_js",
-      "label": "属性·版型分类：点开选第一个",
+      "type": "web_el_action",
+      "label": "属性·qn_prop_banxing：读元素库配方自动跑",
       "args": {
-        "code": "async () => {\n  const NAME = '版型分类';\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const lab = [...document.querySelectorAll('.sell-component-info-wrapper-label')]\n    .find(e => (e.innerText || '').trim() === NAME);\n  if (!lab) return NAME + ':no-label';\n  let p = lab, inp = null, h = 0;\n  while (p && h < 5) {\n    inp = p.querySelector(\"input[placeholder='请选择']\");\n    if (inp) break;\n    p = p.parentElement; h++;\n  }\n  if (!inp) return NAME + ':no-input';\n  const wrap = inp.parentElement;\n  const cur = wrap && wrap.querySelector('.next-select-values');\n  if (cur && (cur.innerText || '').indexOf('请选择') < 0) return NAME + ':already';\n  inp.click();\n  await sleep(450);\n  const ov = document.querySelector('.next-overlay-wrapper.opened');\n  const first = ov ? ov.querySelector('div.options-item') : null;\n  if (!first) return NAME + ':no-option';\n  const picked = (first.innerText || '').replace(/\\s+/g, '').trim().slice(0, 10);\n  first.click();\n  await sleep(280);\n  return NAME + '=' + picked;\n}",
-        "jitter": [
-          300,
-          600
-        ]
+        "key": "qn_prop_banxing",
+        "limit_ms": 8000
       },
       "id": "n65"
     },
     {
-      "type": "web_click",
-      "label": "点容器外空白关闭下拉（多选不会自动关）",
+      "type": "web_el_action",
+      "label": "属性·qn_prop_mianliao：读元素库配方自动跑",
       "args": {
-        "target": "text=商品属性",
-        "limit_ms": 6000,
-        "jitter": [
-          300,
-          600
-        ],
-        "on_fail": {
-          "mode": "skip"
-        }
+        "key": "qn_prop_mianliao",
+        "limit_ms": 8000
       },
       "id": "n66"
     },
     {
-      "type": "web_js",
-      "label": "属性·面料：点开选第一个",
+      "type": "web_el_action",
+      "label": "属性·qn_prop_season：读元素库配方自动跑",
       "args": {
-        "code": "async () => {\n  const NAME = '面料';\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const lab = [...document.querySelectorAll('.sell-component-info-wrapper-label')]\n    .find(e => (e.innerText || '').trim() === NAME);\n  if (!lab) return NAME + ':no-label';\n  let p = lab, inp = null, h = 0;\n  while (p && h < 5) {\n    inp = p.querySelector(\"input[placeholder='请选择']\");\n    if (inp) break;\n    p = p.parentElement; h++;\n  }\n  if (!inp) return NAME + ':no-input';\n  const wrap = inp.parentElement;\n  const cur = wrap && wrap.querySelector('.next-select-values');\n  if (cur && (cur.innerText || '').indexOf('请选择') < 0) return NAME + ':already';\n  inp.click();\n  await sleep(450);\n  const ov = document.querySelector('.next-overlay-wrapper.opened');\n  const first = ov ? ov.querySelector('div.options-item') : null;\n  if (!first) return NAME + ':no-option';\n  const picked = (first.innerText || '').replace(/\\s+/g, '').trim().slice(0, 10);\n  first.click();\n  await sleep(280);\n  return NAME + '=' + picked;\n}",
-        "jitter": [
-          300,
-          600
-        ]
+        "key": "qn_prop_season",
+        "limit_ms": 8000
       },
       "id": "n67"
     },
     {
-      "type": "web_click",
-      "label": "点容器外空白关闭下拉（多选不会自动关）",
+      "type": "web_el_action",
+      "label": "属性·qn_prop_xiuchang：读元素库配方自动跑",
       "args": {
-        "target": "text=商品属性",
-        "limit_ms": 6000,
-        "jitter": [
-          300,
-          600
-        ],
-        "on_fail": {
-          "mode": "skip"
-        }
+        "key": "qn_prop_xiuchang",
+        "limit_ms": 8000
       },
       "id": "n68"
     },
     {
-      "type": "web_js",
-      "label": "属性·上市年份季节：点开选第一个",
+      "type": "web_el_action",
+      "label": "属性·qn_prop_gender：读元素库配方自动跑",
       "args": {
-        "code": "async () => {\n  const NAME = '上市年份季节';\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const lab = [...document.querySelectorAll('.sell-component-info-wrapper-label')]\n    .find(e => (e.innerText || '').trim() === NAME);\n  if (!lab) return NAME + ':no-label';\n  let p = lab, inp = null, h = 0;\n  while (p && h < 5) {\n    inp = p.querySelector(\"input[placeholder='请选择']\");\n    if (inp) break;\n    p = p.parentElement; h++;\n  }\n  if (!inp) return NAME + ':no-input';\n  const wrap = inp.parentElement;\n  const cur = wrap && wrap.querySelector('.next-select-values');\n  if (cur && (cur.innerText || '').indexOf('请选择') < 0) return NAME + ':already';\n  inp.click();\n  await sleep(450);\n  const ov = document.querySelector('.next-overlay-wrapper.opened');\n  const first = ov ? ov.querySelector('div.options-item') : null;\n  if (!first) return NAME + ':no-option';\n  const picked = (first.innerText || '').replace(/\\s+/g, '').trim().slice(0, 10);\n  first.click();\n  await sleep(280);\n  return NAME + '=' + picked;\n}",
-        "jitter": [
-          300,
-          600
-        ]
+        "key": "qn_prop_gender",
+        "limit_ms": 8000
       },
       "id": "n69"
     },
     {
-      "type": "web_click",
-      "label": "点容器外空白关闭下拉（多选不会自动关）",
+      "type": "web_js",
+      "label": "末尾业务断言：主图5张 + 属性5个有值",
       "args": {
-        "target": "text=商品属性",
-        "limit_ms": 6000,
-        "jitter": [
-          300,
-          600
-        ],
-        "on_fail": {
-          "mode": "skip"
-        }
+        "code": "() => {\n  const imgs = document.querySelectorAll('.sell-component-simply-images img').length;\n  const names = ['版型分类', '面料', '上市年份季节', '袖长类型', '适用性别'];\n  let filled = 0;\n  for (const nm of names) {\n    const lab = [...document.querySelectorAll('span.sell-component-info-wrapper-label')]\n      .find(e => (e.innerText || '').trim() === nm);\n    if (!lab) continue;\n    const box = lab.closest('.sell-component-info-wrapper-wrap');\n    if (!box) continue;\n    const inp = box.querySelector('input');\n    const sel = box.querySelector('.next-select-values');\n    const v = (inp && inp.value) ? inp.value : (sel ? (sel.innerText || '').trim() : '');\n    if (v && v.indexOf('请选择') < 0 && v.indexOf('请输入') < 0) filled++;\n  }\n  if (imgs < 5 || filled < 5) {\n    throw new Error('业务断言失败: 主图=' + imgs + ' 属性已填=' + filled);\n  }\n  return '主图=5 属性=5';\n}"
       },
       "id": "n70"
-    },
-    {
-      "type": "web_js",
-      "label": "属性·袖长类型：点开选第一个",
-      "args": {
-        "code": "async () => {\n  const NAME = '袖长类型';\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const lab = [...document.querySelectorAll('.sell-component-info-wrapper-label')]\n    .find(e => (e.innerText || '').trim() === NAME);\n  if (!lab) return NAME + ':no-label';\n  let p = lab, inp = null, h = 0;\n  while (p && h < 5) {\n    inp = p.querySelector(\"input[placeholder='请选择']\");\n    if (inp) break;\n    p = p.parentElement; h++;\n  }\n  if (!inp) return NAME + ':no-input';\n  const wrap = inp.parentElement;\n  const cur = wrap && wrap.querySelector('.next-select-values');\n  if (cur && (cur.innerText || '').indexOf('请选择') < 0) return NAME + ':already';\n  inp.click();\n  await sleep(450);\n  const ov = document.querySelector('.next-overlay-wrapper.opened');\n  const first = ov ? ov.querySelector('div.options-item') : null;\n  if (!first) return NAME + ':no-option';\n  const picked = (first.innerText || '').replace(/\\s+/g, '').trim().slice(0, 10);\n  first.click();\n  await sleep(280);\n  return NAME + '=' + picked;\n}",
-        "jitter": [
-          300,
-          600
-        ]
-      },
-      "id": "n71"
-    },
-    {
-      "type": "web_click",
-      "label": "点容器外空白关闭下拉（多选不会自动关）",
-      "args": {
-        "target": "text=商品属性",
-        "limit_ms": 6000,
-        "jitter": [
-          300,
-          600
-        ],
-        "on_fail": {
-          "mode": "skip"
-        }
-      },
-      "id": "n72"
-    },
-    {
-      "type": "web_js",
-      "label": "属性·适用性别：点开选第一个",
-      "args": {
-        "code": "async () => {\n  const NAME = '适用性别';\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const lab = [...document.querySelectorAll('.sell-component-info-wrapper-label')]\n    .find(e => (e.innerText || '').trim() === NAME);\n  if (!lab) return NAME + ':no-label';\n  let p = lab, inp = null, h = 0;\n  while (p && h < 5) {\n    inp = p.querySelector(\"input[placeholder='请选择']\");\n    if (inp) break;\n    p = p.parentElement; h++;\n  }\n  if (!inp) return NAME + ':no-input';\n  const wrap = inp.parentElement;\n  const cur = wrap && wrap.querySelector('.next-select-values');\n  if (cur && (cur.innerText || '').indexOf('请选择') < 0) return NAME + ':already';\n  inp.click();\n  await sleep(450);\n  const ov = document.querySelector('.next-overlay-wrapper.opened');\n  const first = ov ? ov.querySelector('div.options-item') : null;\n  if (!first) return NAME + ':no-option';\n  const picked = (first.innerText || '').replace(/\\s+/g, '').trim().slice(0, 10);\n  first.click();\n  await sleep(280);\n  return NAME + '=' + picked;\n}",
-        "jitter": [
-          300,
-          600
-        ]
-      },
-      "id": "n73"
-    },
-    {
-      "type": "web_click",
-      "label": "点容器外空白关闭下拉（多选不会自动关）",
-      "args": {
-        "target": "text=商品属性",
-        "limit_ms": 6000,
-        "jitter": [
-          300,
-          600
-        ],
-        "on_fail": {
-          "mode": "skip"
-        }
-      },
-      "id": "n74"
     }
   ],
   "edges": [
@@ -1384,26 +1277,6 @@
       "id": "e69",
       "from": "n69",
       "to": "n70"
-    },
-    {
-      "id": "e70",
-      "from": "n70",
-      "to": "n71"
-    },
-    {
-      "id": "e71",
-      "from": "n71",
-      "to": "n72"
-    },
-    {
-      "id": "e72",
-      "from": "n72",
-      "to": "n73"
-    },
-    {
-      "id": "e73",
-      "from": "n73",
-      "to": "n74"
     }
   ],
   "vars": [
