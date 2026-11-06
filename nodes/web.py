@@ -296,12 +296,16 @@ def _library_entry(name: str, ctx: ExecutionContext | None) -> dict[str, Any] | 
 
 
 def _default_headless() -> bool:
-    """全局默认：RPA_HEADLESS=false 时有头（能看见窗口，也过风控）。
+    """全局默认：**有头**。只有显式 `RPA_HEADLESS=true` 才无头。
 
-    优先级：节点 args.headless > 环境变量 RPA_HEADLESS > 默认 true（服务器安全）
+    为什么默认有头：无头浏览器会被千牛/拼多多/淘宝这类后台直接判成机器人
+    （即使 cookie 全对也照样拦），而且看不到页面就没法排查。
+    服务器上确实要无界面，再显式设 RPA_HEADLESS=true。
+
+    优先级：节点 args.headless > 环境变量 RPA_HEADLESS > 默认 false
     """
-    v = os.getenv("RPA_HEADLESS", "true").strip().lower()
-    return v not in ("0", "false", "no", "off")
+    v = os.getenv("RPA_HEADLESS", "false").strip().lower()
+    return v in ("1", "true", "yes", "on")
 
 
 def _looks_like_text(expr: str) -> bool:

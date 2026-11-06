@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any, Literal
@@ -40,8 +41,26 @@ _SHARED_BROWSER: dict[str, Any] = {}
 
 
 async def _attach_shared_browser(ctx: ExecutionContext) -> None:
-    """把进程级共享浏览器挂到给定 ctx 上；首次调用才真正启动。"""
-    if _SHARED_BROWSER.get("context") is None:  # 持久 profile 时 browser 可能是 None
+    """把进程级共享浏览器挂到给定 ctx 上；首次调用才真正启动或接管。"""
+    if _SHARED_BROWSER.get("context") is not None:
+        ctx.browser = _SHARED_BROWSER["browser"]
+        ctx.browser_context = _SHARED_BROWSER["context"]
+        return
+
+    cdp = (os.getenv("RPA_CDP") or "").strip()
+    if cdp:
+        # 接管已经在跑的浏览器（Ant 指纹浏览器 / 用户手动开的 Chrome）。
+        # 关键：不 launch、不注入 stealth —— 指纹由对方管，我们注入反而破坏环境，
+        # 千牛/拼多多这类后台就是靠这些细节判定机器人的。
+        from playwright.async_api import async_playwright
+
+        pw = await async_playwright().start()
+        browser = await pw.chromium.connect_over_cdp(cdp, timeout=15_000)
+        contexts = list(getattr(browser, "contexts", None) or [])
+        context = contexts[0] if contexts else await browser.new_context()
+        setattr(ctx, "_ant_owned", True)
+        _SHARED_BROWSER.update(browser=browser, context=context, _pw=pw, cdp=cdp)
+    else:
         from engine import stealth
         from nodes.web import _default_headless, _open_browser
 
@@ -51,6 +70,7 @@ async def _attach_shared_browser(ctx: ExecutionContext) -> None:
         except Exception:  # noqa: BLE001 - 注入失败不中断
             pass
         _SHARED_BROWSER.update(browser=browser, context=context, _pw=pw)
+
     ctx.browser = _SHARED_BROWSER["browser"]
     ctx.browser_context = _SHARED_BROWSER["context"]
 
