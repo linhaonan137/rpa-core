@@ -76,7 +76,15 @@ async def _run(args: argparse.Namespace) -> int:
         step=args.step,
         on_pause=(lambda nid, when: print(f"  ⏸  {nid} [{when}]")) if args.step else None,
     )
-    result = await Runner(flow, ctx, opts).execute()
+    # CLI 直跑也必须接管已登录的共享浏览器：否则 web_open 会起一个无登录态的
+    # 新浏览器，工作台跳登录页，n2 等 20s 超时（实测 2026-11-06）。
+    # MCP flow_run / HTTP /run 都有这一步，CLI 原来漏了。
+    from api.mcp import _attach_shared_browser
+    from engine.browser_lock import browser_lock
+
+    await _attach_shared_browser(ctx)
+    async with browser_lock():
+        result = await Runner(flow, ctx, opts).execute()
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
