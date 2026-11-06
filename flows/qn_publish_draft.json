@@ -1,5 +1,5 @@
 {
-  "name": "千牛发商品存草稿（主图5张+属性下拉+SKU价格库存+保存草稿）",
+  "name": "千牛发商品：选类目+标题+主图5张+属性5字段（固定版）",
   "version": 1,
   "nodes": [
     {
@@ -112,13 +112,9 @@
         "y": 0.0
       },
       "args": {
-        "jitter": [
-          400,
-          1000
-        ],
-        "kind": "title",
-        "match": "contains",
-        "title": "商品发布"
+        "kind": "url",
+        "url": "category.htm",
+        "prefer": "latest"
       },
       "off": false,
       "budget_ms": 0,
@@ -126,7 +122,8 @@
         "mode": "retry",
         "attempts": 2,
         "backoff_ms": 1500
-      }
+      },
+      "label": "切到选类目页（按 URL，避开残留填表页）"
     },
     {
       "id": "n8",
@@ -1040,275 +1037,6 @@
         }
       },
       "id": "n74"
-    },
-    {
-      "type": "web_type",
-      "label": "主色：直接输入白色",
-      "args": {
-        "target": "input[placeholder*='主色']",
-        "text": "{颜色}",
-        "kind": "type",
-        "delay_ms": 80,
-        "jitter": [
-          300,
-          700
-        ]
-      },
-      "id": "n75"
-    },
-    {
-      "id": "n76",
-      "type": "web_key",
-      "label": "关主色面板（真实键盘 Escape）",
-      "args": {
-        "key": "Escape",
-        "jitter": [
-          200,
-          400
-        ]
-      }
-    },
-    {
-      "type": "sleep",
-      "label": "留 1 秒给尺码面板渲染",
-      "args": {
-        "ms": [
-          1500,
-          1800
-        ]
-      },
-      "id": "n77"
-    },
-    {
-      "id": "n78",
-      "type": "web_click",
-      "position": {
-        "x": 0.0,
-        "y": 0.0
-      },
-      "args": {
-        "jitter": [
-          300,
-          700
-        ],
-        "target": "input[placeholder*='请选择尺码']"
-      },
-      "off": false,
-      "budget_ms": 0,
-      "label": "点尺码框（按 placeholder，站上验证）"
-    },
-    {
-      "id": "n79",
-      "type": "web_wait",
-      "position": {
-        "x": 0.0,
-        "y": 0.0
-      },
-      "args": {
-        "jitter": [
-          300,
-          700
-        ],
-        "limit_ms": 10000,
-        "text": "全不选"
-      },
-      "off": false,
-      "budget_ms": 0
-    },
-    {
-      "id": "n80",
-      "type": "web_js",
-      "position": {
-        "x": 0.0,
-        "y": 0.0
-      },
-      "args": {
-        "code": "() => { const el = [...document.querySelectorAll('*')].find(e => (e.innerText||'').trim() === '175/88A' && e.getBoundingClientRect().width > 10); if (!el) throw new Error('找不到 175/88A'); el.click(); return '175/88A'; }",
-        "jitter": [
-          300,
-          700
-        ]
-      },
-      "off": false,
-      "budget_ms": 0
-    },
-    {
-      "id": "n81",
-      "type": "web_js",
-      "position": {
-        "x": 0.0,
-        "y": 0.0
-      },
-      "args": {
-        "code": "() => { const btn = [...document.querySelectorAll('button')].find(b => (b.innerText||'').trim() === '确定' && b.getBoundingClientRect().width > 10); if (!btn) throw new Error('找不到确定'); btn.click(); return '确定'; }",
-        "jitter": [
-          300,
-          700
-        ]
-      },
-      "off": false,
-      "budget_ms": 0
-    },
-    {
-      "type": "web_click",
-      "label": "点容器外空白关闭下拉（多选不会自动关）",
-      "args": {
-        "target": "text=商品属性",
-        "limit_ms": 6000,
-        "jitter": [
-          300,
-          600
-        ],
-        "on_fail": {
-          "mode": "skip"
-        }
-      },
-      "id": "n82"
-    },
-    {
-      "id": "n83",
-      "type": "web_type",
-      "position": {
-        "x": 0.0,
-        "y": 0.0
-      },
-      "args": {
-        "delay_ms": 60,
-        "jitter": [
-          300,
-          700
-        ],
-        "kind": "type",
-        "target": "@el:qn_price_input",
-        "text": "{价格}"
-      },
-      "off": false,
-      "budget_ms": 0
-    },
-    {
-      "type": "web_js",
-      "label": "给 SKU 行输入框打标记",
-      "args": {
-        "code": "() => {\n  const rows = [...document.querySelectorAll('tbody tr')]\n    .filter(r => (r.innerText || '').indexOf('/') >= 0);\n  const row = rows[rows.length - 1];\n  if (!row) return 'no-sku-row';\n  const ins = [...row.querySelectorAll('input')];\n  ins.forEach((e, i) => e.setAttribute('data-rpa-sku', String(i)));\n  return { cells: ins.length, values: ins.map(e => e.value || '') };\n}"
-      },
-      "id": "n84"
-    },
-    {
-      "type": "web_type",
-      "label": "SKU 价格（第 1 个框）",
-      "args": {
-        "target": "[data-rpa-sku=\"0\"]",
-        "text": "{SKU价格}",
-        "kind": "type",
-        "delay_ms": 60,
-        "jitter": [
-          300,
-          700
-        ]
-      },
-      "id": "n85"
-    },
-    {
-      "type": "web_type",
-      "label": "SKU 库存（第 2 个框）",
-      "args": {
-        "target": "[data-rpa-sku=\"1\"]",
-        "text": "{SKU库存}",
-        "kind": "type",
-        "delay_ms": 60,
-        "jitter": [
-          300,
-          700
-        ]
-      },
-      "id": "n86"
-    },
-    {
-      "type": "web_key",
-      "label": "Tab 失焦触发总库存汇总",
-      "args": {
-        "key": "Tab"
-      },
-      "id": "n87"
-    },
-    {
-      "id": "n88",
-      "type": "web_click",
-      "position": {
-        "x": 0.0,
-        "y": 0.0
-      },
-      "args": {
-        "target": "@el:qn_save_draft",
-        "jitter": [
-          600,
-          1500
-        ]
-      },
-      "label": "保存草稿（@el:；disabled 时明确失败）",
-      "off": false,
-      "budget_ms": 0
-    },
-    {
-      "id": "n89",
-      "type": "sleep",
-      "position": {
-        "x": 0.0,
-        "y": 0.0
-      },
-      "args": {
-        "ms": [
-          1500,
-          2500
-        ]
-      },
-      "off": false,
-      "budget_ms": 0
-    },
-    {
-      "id": "n90",
-      "type": "web_open",
-      "label": "查草稿箱做业务断言",
-      "args": {
-        "url": "https://myseller.taobao.com/home.htm/SellManage/draft?current=1&pageSize=20",
-        "until": "dom",
-        "jitter": [
-          600,
-          1500
-        ]
-      }
-    },
-    {
-      "id": "n91",
-      "type": "web_wait",
-      "args": {
-        "text": "草稿",
-        "limit_ms": 20000,
-        "jitter": [
-          300,
-          800
-        ]
-      }
-    },
-    {
-      "id": "n92",
-      "type": "web_elem_info",
-      "label": "draft_hits>0 即保存成功（回传 n8n）",
-      "args": {
-        "target": "text={宝贝标题}",
-        "attr": "count",
-        "save_as": "draft_hits"
-      }
-    },
-    {
-      "id": "n93",
-      "type": "sleep",
-      "args": {
-        "ms": [
-          500,
-          1200
-        ]
-      }
     }
   ],
   "edges": [
@@ -1676,101 +1404,6 @@
       "id": "e73",
       "from": "n73",
       "to": "n74"
-    },
-    {
-      "id": "e74",
-      "from": "n74",
-      "to": "n75"
-    },
-    {
-      "id": "e75",
-      "from": "n75",
-      "to": "n76"
-    },
-    {
-      "id": "e76",
-      "from": "n76",
-      "to": "n77"
-    },
-    {
-      "id": "e77",
-      "from": "n77",
-      "to": "n78"
-    },
-    {
-      "id": "e78",
-      "from": "n78",
-      "to": "n79"
-    },
-    {
-      "id": "e79",
-      "from": "n79",
-      "to": "n80"
-    },
-    {
-      "id": "e80",
-      "from": "n80",
-      "to": "n81"
-    },
-    {
-      "id": "e81",
-      "from": "n81",
-      "to": "n82"
-    },
-    {
-      "id": "e82",
-      "from": "n82",
-      "to": "n83"
-    },
-    {
-      "id": "e83",
-      "from": "n83",
-      "to": "n84"
-    },
-    {
-      "id": "e84",
-      "from": "n84",
-      "to": "n85"
-    },
-    {
-      "id": "e85",
-      "from": "n85",
-      "to": "n86"
-    },
-    {
-      "id": "e86",
-      "from": "n86",
-      "to": "n87"
-    },
-    {
-      "id": "e87",
-      "from": "n87",
-      "to": "n88"
-    },
-    {
-      "id": "e88",
-      "from": "n88",
-      "to": "n89"
-    },
-    {
-      "id": "e89",
-      "from": "n89",
-      "to": "n90"
-    },
-    {
-      "id": "e90",
-      "from": "n90",
-      "to": "n91"
-    },
-    {
-      "id": "e91",
-      "from": "n91",
-      "to": "n92"
-    },
-    {
-      "id": "e92",
-      "from": "n92",
-      "to": "n93"
     }
   ],
   "vars": [
@@ -1793,22 +1426,6 @@
     {
       "name": "导购标题",
       "value": "自动化测试商品草稿勿拍"
-    },
-    {
-      "name": "价格",
-      "value": "99"
-    },
-    {
-      "name": "颜色",
-      "value": "白色"
-    },
-    {
-      "name": "SKU价格",
-      "value": "99"
-    },
-    {
-      "name": "SKU库存",
-      "value": "100"
     },
     {
       "name": "主图1",
