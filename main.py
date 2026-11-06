@@ -153,6 +153,57 @@ def _no_args_banner(released: list[str]) -> int:
     return 0
 
 
+def _sync_cookies(src: str | None, dst: str | None) -> int:
+    """把日常 Chrome 的登录态同步到 RPA 的持久 profile。
+
+    只复制两样：`Local State`（DPAPI 加密密钥，缺了 cookie 解不开）
+    和 `Default/Network/Cookies`。两边浏览器都必须关着 —— 开着文件会被锁，
+    而且 Chrome 内存里刚产生的 cookie 还没落盘。
+    """
+    import os
+    import shutil
+    import sqlite3
+
+    from engine.paths import PROJECT_ROOT
+
+    local = os.environ.get("LOCALAPPDATA", "")
+    src_dir = Path(src) if src else Path(local) / "Google" / "Chrome" / "User Data"
+    profile = os.getenv("RPA_PROFILE") or ""
+    dst_dir = Path(dst) if dst else (Path(profile) if profile and profile.lower() not in ("off", "0") else Path(PROJECT_ROOT) / ".chrome-profile")
+
+    cookie_rel = Path("Default") / "Network" / "Cookies"
+    if not (src_dir / cookie_rel).exists():
+        print(f"源 profile 里没有 {cookie_rel}：{src_dir}")
+        return 1
+
+    for p in {src_dir / cookie_rel, dst_dir / cookie_rel}:
+        if p.exists():
+            try:
+                with p.open("rb") as f:
+                    f.read(1)
+            except OSError:
+                print(f"文件被占用，先关掉对应浏览器：{p}")
+                return 1
+
+    (dst_dir / "Default" / "Network").mkdir(parents=True, exist_ok=True)
+    for rel in (cookie_rel, Path("Local State")):
+        s, d = src_dir / rel, dst_dir / rel
+        if s.exists():
+            shutil.copy2(s, d)
+            print(f"  同步 {rel}  ({s.stat().st_size // 1024} KB)")
+        else:
+            print(f"  跳过（源里没有）{rel}")
+
+    try:
+        con = sqlite3.connect(str(dst_dir / cookie_rel))
+        n, h = con.execute("select count(*), count(distinct host_key) from cookies").fetchone()
+        con.close()
+        print(f"完成：{n} 条 cookie / {h} 个站点 -> {dst_dir}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"已复制，但统计失败：{exc}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     from engine.paths import bootstrap_frozen, ensure_dirs
 
@@ -186,6 +237,12 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("mcp", help="起 MCP 服务（stdio）")
     sub.add_parser("nodes", help="列出已注册节点")
 
+    ck = sub.add_parser("sync-cookies", help="把日常 Chrome 的登录态同步到 RPA profile")
+    ck.add_argument("--from-chrome", dest="from_dir", default=None,
+                    help="Chrome 的 User Data 目录（默认 %%LOCALAPPDATA%%\\Google\\Chrome\\User Data）")
+    ck.add_argument("--to", dest="to_dir", default=None,
+                    help="目标 profile（默认 RPA_PROFILE 或 .chrome-profile）")
+
     sc = sub.add_parser("schedule", help="定时执行流程（无人值守）")
     sc.add_argument("--flows", default=None, help=f"流程目录（默认 {FLOWS_DIR}）")
     sc.add_argument("--db", default=None, help=f"数据库文件（默认 {DB_PATH}）")
@@ -216,6 +273,9 @@ def main(argv: list[str] | None = None) -> int:
 
         mcp_main()
         return 0
+
+    if args.cmd == "sync-cookies":
+        return _sync_cookies(args.from_dir, args.to_dir)
 
     if args.cmd == "schedule":
         from api.scheduler import FlowScheduler, Job
