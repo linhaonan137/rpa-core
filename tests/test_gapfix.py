@@ -141,6 +141,7 @@ async def test_attach_shared_browser_reuses_ctx_page(monkeypatch):
     bctx.browser = browser
     page = MagicMock()
     page.context = bctx
+    page.evaluate = AsyncMock(return_value=1)   # 探活必须能 await，否则会被当成死引用
 
     monkeypatch.setattr(mcp_mod._ctx, "page", page)
     monkeypatch.setattr(mcp_mod, "_SHARED_BROWSER", {})
@@ -158,3 +159,68 @@ async def test_attach_shared_browser_reuses_ctx_page(monkeypatch):
     assert ctx.browser_context is bctx
     assert mcp_mod._SHARED_BROWSER["context"] is bctx
     assert getattr(ctx, "_ant_owned", False) is True
+
+
+async def test_attach_clears_dead_ref_and_uses_recorded_cdp(monkeypatch):
+    """_ctx.page 是死引用（标签被关）时：清掉，用记录的 CDP 端点接管，绝不 launch。"""
+    dead = MagicMock()
+    dead.evaluate = AsyncMock(side_effect=RuntimeError("Target page has been closed"))
+    monkeypatch.setattr(mcp_mod._ctx, "page", dead)
+    monkeypatch.setattr(mcp_mod, "_SHARED_BROWSER", {})
+    monkeypatch.setenv("RPA_CDP", "")
+    monkeypatch.setattr(mcp_mod, "_last_cdp", lambda: "http://127.0.0.1:59493")
+
+    connected_browser = MagicMock()
+    connected_browser.contexts = [MagicMock()]
+
+    class _FakeChromium:
+        def __init__(self) -> None:
+            self.connect_over_cdp = AsyncMock(return_value=connected_browser)
+
+    class _FakePW:
+        def __init__(self) -> None:
+            self.chromium = _FakeChromium()
+
+        async def start(self) -> "_FakePW":
+            return self
+
+    class _FakeAPW:
+        def __call__(self) -> "_FakeAPW":
+            return self
+
+        async def start(self) -> _FakePW:
+            return _FakePW()
+
+    monkeypatch.setattr("playwright.async_api.async_playwright", _FakeAPW)
+
+    async def must_not_launch(*args, **kwargs):  # noqa: ANN001
+        raise AssertionError("死引用 + 有端点记录时不该 launch")
+
+    monkeypatch.setattr(web, "_open_browser", must_not_launch)
+
+    ctx = ExecutionContext()
+    await mcp_mod._attach_shared_browser(ctx)
+
+    assert mcp_mod._ctx.page is None          # 死引用被清
+    assert ctx.browser is connected_browser
+    assert getattr(ctx, "_ant_owned", False) is True
+
+
+async def test_attach_launches_only_when_everything_dead(monkeypatch):
+    """死引用 + 无缓存 + 无端点：launch 是最后手段。"""
+    monkeypatch.setattr(mcp_mod._ctx, "page", None)
+    monkeypatch.setattr(mcp_mod, "_SHARED_BROWSER", {})
+    monkeypatch.setenv("RPA_CDP", "")
+    monkeypatch.setattr(mcp_mod, "_last_cdp", lambda: "")
+
+    new_bctx = MagicMock()
+
+    async def fake_open(headless: bool = True):  # noqa: ANN001
+        return MagicMock(), MagicMock(), new_bctx
+
+    monkeypatch.setattr(web, "_open_browser", fake_open)
+
+    ctx = ExecutionContext()
+    await mcp_mod._attach_shared_browser(ctx)
+
+    assert ctx.browser_context is new_bctx

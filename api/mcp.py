@@ -40,13 +40,50 @@ _ctx = ExecutionContext(run_id="mcp")
 _SHARED_BROWSER: dict[str, Any] = {}
 
 
+def _last_cdp() -> str:
+    """上次 attach 过的 CDP 端点：MCP 服务重启后也能找回同一只浏览器。"""
+    try:
+        from engine.paths import OUT_DIR
+
+        p = Path(OUT_DIR) / "_last_cdp.txt"
+        if p.exists():
+            return p.read_text(encoding="utf-8").strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def _remember_cdp(cdp: str) -> None:
+    try:
+        from engine.paths import OUT_DIR
+
+        p = Path(OUT_DIR) / "_last_cdp.txt"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(cdp, encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def _attach_shared_browser(ctx: ExecutionContext) -> None:
-    """把进程级共享浏览器挂到给定 ctx 上；首次调用才真正启动或接管。"""
-    # 优先复用当前 MCP 会话已 attach 的浏览器（用户手动开的 Ant / web_open(kind=attach)）。
-    # MCP 服务进程往往没设 RPA_CDP，若放任它 launch，flow_run 会拿到一个没有登录态的
-    # 新浏览器 —— 实测千牛直接跳登录页，n2 等 20s 超时。
-    # 每次都以 _ctx 为准：用户随时可能重新 attach 到另一只浏览器。
+    """把进程级共享浏览器挂到给定 ctx 上。
+
+    复用优先级（用户要求：只要当前登录态浏览器活着，就绝不新开）：
+      1. _ctx.page 探活通过（web_open(kind=attach) 接管的那只）——
+         死引用要清掉：标签被关后 page 对象还在，但页面已不可用，
+         拿它当"活着"会导致下面的分支误判。
+      2. 进程级缓存的 browser 仍连接着
+      3. RPA_CDP / 上次 attach 记录的端点 -> connect_over_cdp（幂等，不新开浏览器）
+      4. 以上全失败才 launch —— 千牛登录态只在用户手动开的浏览器里，
+         launch 出来的必然跳登录页（实测 n2 等 20s 超时）。
+    """
+    # ① _ctx.page 探活
     attached = getattr(_ctx, "page", None)
+    if attached is not None:
+        try:
+            await attached.evaluate("1")
+        except Exception:  # noqa: BLE001
+            attached = None
+            _ctx.page = None
     if attached is not None:
         bctx = getattr(attached, "context", None)
         browser = getattr(bctx, "browser", None) if bctx is not None else None
@@ -57,35 +94,51 @@ async def _attach_shared_browser(ctx: ExecutionContext) -> None:
             ctx.browser_context = bctx
             return
 
+    # ② 进程级缓存仍连接着
     if _SHARED_BROWSER.get("context") is not None:
-        ctx.browser = _SHARED_BROWSER["browser"]
-        ctx.browser_context = _SHARED_BROWSER["context"]
-        return
+        browser = _SHARED_BROWSER.get("browser")
+        ok = False
+        try:
+            ok = bool(browser is not None and browser.is_connected())
+        except Exception:  # noqa: BLE001
+            ok = False
+        if ok:
+            ctx.browser = browser
+            ctx.browser_context = _SHARED_BROWSER["context"]
+            if _SHARED_BROWSER.get("cdp"):
+                setattr(ctx, "_ant_owned", True)
+            return
+        _SHARED_BROWSER.clear()   # 缓存失效，往下走重新接管
 
-    cdp = (os.getenv("RPA_CDP") or "").strip()
+    # ③ CDP 接管：环境变量优先，其次上次 attach 记录的端点
+    cdp = (os.getenv("RPA_CDP") or "").strip() or _last_cdp()
     if cdp:
-        # 接管已经在跑的浏览器（Ant 指纹浏览器 / 用户手动开的 Chrome）。
-        # 关键：不 launch、不注入 stealth —— 指纹由对方管，我们注入反而破坏环境，
-        # 千牛/拼多多这类后台就是靠这些细节判定机器人的。
         from playwright.async_api import async_playwright
 
-        pw = await async_playwright().start()
-        browser = await pw.chromium.connect_over_cdp(cdp, timeout=15_000)
-        contexts = list(getattr(browser, "contexts", None) or [])
-        context = contexts[0] if contexts else await browser.new_context()
-        setattr(ctx, "_ant_owned", True)
-        _SHARED_BROWSER.update(browser=browser, context=context, _pw=pw, cdp=cdp)
-    else:
-        from engine import stealth
-        from nodes.web import _default_headless, _open_browser
-
-        pw, browser, context = await _open_browser(headless=_default_headless())
         try:
-            await stealth.apply(context, ctx)
-        except Exception:  # noqa: BLE001 - 注入失败不中断
-            pass
-        _SHARED_BROWSER.update(browser=browser, context=context, _pw=pw)
+            pw = await async_playwright().start()
+            browser = await pw.chromium.connect_over_cdp(cdp, timeout=15_000)
+            contexts = list(getattr(browser, "contexts", None) or [])
+            context = contexts[0] if contexts else await browser.new_context()
+        except Exception as exc:  # noqa: BLE001 - 浏览器没开就连不上，落回 launch
+            cdp = ""
+        else:
+            setattr(ctx, "_ant_owned", True)
+            _SHARED_BROWSER.update(browser=browser, context=context, _pw=pw, cdp=cdp)
+            ctx.browser = _SHARED_BROWSER["browser"]
+            ctx.browser_context = _SHARED_BROWSER["context"]
+            return
 
+    # ④ 最后手段：launch
+    from engine import stealth
+    from nodes.web import _default_headless, _open_browser
+
+    pw, browser, context = await _open_browser(headless=_default_headless())
+    try:
+        await stealth.apply(context, ctx)
+    except Exception:  # noqa: BLE001 - 注入失败不中断
+        pass
+    _SHARED_BROWSER.update(browser=browser, context=context, _pw=pw)
     ctx.browser = _SHARED_BROWSER["browser"]
     ctx.browser_context = _SHARED_BROWSER["context"]
 
@@ -264,7 +317,11 @@ async def web_open(
             a["url"] = url
         if cdp:
             a["cdp"] = cdp
-        return await _call("web_attach", a)
+        r = await _call("web_attach", a)
+        if r.get("ok") and cdp:
+            # 记住端点：MCP 服务重启后 flow_run 也能自动找回同一只登录态浏览器
+            _remember_cdp(cdp)
+        return r
     if kind == "reuse":
         # 复用当前页：给 url 就在当前标签导航，不给就纯确认"有页面可用"
         # （之前没这个分支，url 空时落到 web_open 报"缺 url"，语义完全丢失）

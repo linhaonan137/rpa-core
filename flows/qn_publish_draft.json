@@ -34,7 +34,7 @@
         ],
         "kind": "visible",
         "limit_ms": 20000,
-        "target": "a:has-text('商品')"
+        "target": "@el:qn_goods_menu"
       },
       "off": false,
       "budget_ms": 0
@@ -51,7 +51,7 @@
           300,
           800
         ],
-        "target": "a:has-text('商品')"
+        "target": "@el:qn_goods_menu"
       },
       "off": false,
       "budget_ms": 0
@@ -70,7 +70,7 @@
         ],
         "kind": "visible",
         "limit_ms": 15000,
-        "target": "a:has-text('发布商品')"
+        "target": "@el:qn_publish_link"
       },
       "off": false,
       "budget_ms": 0
@@ -223,7 +223,7 @@
           300,
           700
         ],
-        "target": "input[placeholder='请选择']"
+        "target": "@el:qn_brand_select"
       },
       "off": false,
       "budget_ms": 0
@@ -276,7 +276,7 @@
           600,
           1500
         ],
-        "target": "button:has-text('确认，下一步')"
+        "target": "@el:qn_confirm_next"
       },
       "off": false,
       "budget_ms": 0
@@ -314,7 +314,7 @@
           800
         ],
         "kind": "type",
-        "target": "input[placeholder*='30个汉字']",
+        "target": "@el:qn_title_input",
         "text": "{宝贝标题}"
       },
       "label": "宝贝标题（React 必须用真实键盘）",
@@ -335,7 +335,7 @@
           800
         ],
         "kind": "type",
-        "target": "input[placeholder*='15个汉字']",
+        "target": "@el:qn_subtitle_input",
         "text": "{导购标题}"
       },
       "label": "导购标题（10~15 汉字）",
@@ -354,7 +354,7 @@
           300,
           700
         ],
-        "target": "input[placeholder*='主色']"
+        "target": "@el:qn_color_input"
       },
       "off": false,
       "budget_ms": 0
@@ -424,7 +424,7 @@
           300,
           700
         ],
-        "target": "input[placeholder*='请选择尺码']"
+        "target": "@el:qn_size_input"
       },
       "off": false,
       "budget_ms": 0
@@ -495,7 +495,7 @@
           700
         ],
         "kind": "type",
-        "target": "input[placeholder='价格']",
+        "target": "@el:qn_price_input",
         "text": "{价格}"
       },
       "off": false,
@@ -503,19 +503,19 @@
     },
     {
       "id": "n29",
-      "type": "web_js",
+      "type": "web_click",
       "position": {
         "x": 0.0,
         "y": 0.0
       },
       "args": {
-        "code": "() => { const btn = [...document.querySelectorAll('button')].find(b => (b.innerText||'').trim() === '保存草稿'); if (!btn) throw new Error('找不到保存草稿按钮'); if (btn.disabled) throw new Error('保存草稿被禁用：必填项未完成'); btn.click(); return '已点保存草稿'; }",
+        "target": "@el:qn_save_draft",
         "jitter": [
           600,
           1500
         ]
       },
-      "label": "保存草稿",
+      "label": "保存草稿（@el: 引用；disabled 时 web_click 明确失败）",
       "off": false,
       "budget_ms": 0
     },
