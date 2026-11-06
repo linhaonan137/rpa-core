@@ -1,0 +1,102 @@
+{
+  "name": "当当搜索抓取（参数化）",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "sys_py",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "code": "from urllib.parse import quote\nprint('http://search.dangdang.com/?key=' + quote('{keyword}', encoding='gbk'))",
+        "save_as": "search_url"
+      },
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n2",
+      "type": "web_open",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "until": "dom",
+        "url": "{search_url}"
+      },
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n3",
+      "type": "web_extract",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "fields": [
+          {
+            "attr": "title",
+            "name": "商品名",
+            "selector": "a"
+          },
+          {
+            "name": "价格",
+            "selector": "p.price"
+          },
+          {
+            "attr": "href",
+            "name": "链接",
+            "selector": "a"
+          }
+        ],
+        "item": "ul.bigimg > li",
+        "save_as": "rows"
+      },
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n4",
+      "type": "data_sheet_write",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "path": "out/dangdang_{keyword}.xlsx",
+        "rows": "{rows}"
+      },
+      "off": false,
+      "budget_ms": 0
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "id": "e2",
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "id": "e3",
+      "from": "n3",
+      "to": "n4"
+    }
+  ],
+  "vars": [
+    {
+      "name": "keyword",
+      "value": "机械键盘"
+    }
+  ],
+  "elements": {}
+}
