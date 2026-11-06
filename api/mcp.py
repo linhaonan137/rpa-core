@@ -1748,6 +1748,9 @@ async def flow_run(
         "run_id": run_id,
         "ms": result["ms"],
         "failed": result["failed"],
+        # 业务结果：流程里 save_as 存的变量（draft_hits / filled_title…）
+        "vars": {k: v for k, v in (ctx.all_vars() or {}).items()
+                 if isinstance(v, (str, int, float, bool)) or v is None},
         "nodes": [{"id": n["node_id"], "type": n["type"], "ok": n["ok"], "ms": n["ms"]}
                   for n in result["nodes"]],
     }

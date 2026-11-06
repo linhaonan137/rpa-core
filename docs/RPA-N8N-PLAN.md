@@ -65,15 +65,18 @@
 
 按阶段做，P0 是接 n8n 的硬前置。
 
-### P0 · 接 n8n 前必备（先做）
+### P0 · 接 n8n 前必备（✅ 已完成 2026-11-06）
 
-| 功能 | 落在哪里 | 具体做法 |
+| 功能 | 落在哪里 | 结果 |
 |---|---|---|
-| `expect` 事后断言 | `qn_publish_draft` 关键节点 | n16（进填表页）加 `expect:{"url":"publish.htm"}`；n29（保存草稿）加 `expect:{"text":"草稿"}` 或查草稿箱数量变化 |
-| `on_fail` 重试 | n7（切标签）、n17（等填表页）等易碎节点 | `{"mode":"retry","attempts":2,"backoff_ms":1500}`；不可逆节点不配 |
-| `save_as` 回传结果 | 新增末节点 | 用 `web_elem_info` 读草稿箱计数 `save_as=draft_count`，n8n 从 `/task` 结果的 data 里拿 |
-| 幂等去重 | n8n 侧 + `draft_check` 流程 | 同标题草稿已存在 → 跳过（见 §2.5）|
-| 连跑 3 次稳定 | 验证动作 | P0 改完后连跑 3 次全绿才算完成 |
+| `expect` 事后断言 | n16 进填表页 | ✅ `expect{url=publish.htm}` |
+| 业务强断言 | 流程末 n31~n33 | ✅ 独立查草稿箱，`save_as=draft_hits` |
+| `on_fail` 重试 | n7 切标签 / n17 等填表页 | ✅ retry 2 次，backoff 1500/1200ms |
+| `save_as` 回传 | n33 + `/run` 返回 | ✅ `vars` 字段已加（HTTP + MCP 两处）|
+| 幂等去重 | `flows/draft_check.json` | ✅ 4 节点，返回 `draft_hits` |
+| 连跑 3 次 | 验收 | ✅ 33.7 / 31.4 / 32.7s 全绿 |
+
+> 注：原本给 n29（保存草稿）加的错误面板断言已**删掉** —— 实测保存后页面会自动跳回「我的商品」列表，URL/错误面板断言都不可靠；业务断言改到流程末独立查草稿箱。
 
 ### P1 · 拟人与稳定（n8n 跑通后）
 

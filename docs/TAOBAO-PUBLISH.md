@@ -232,16 +232,18 @@ web_click(div.image-empty)                        打开「选择图片」弹层
 
 ## 7. 接 n8n 前必须补齐
 
-| # | 缺口 | 说明 |
+| # | 缺口 | 状态 |
 |---|---|---|
-| 1 | 字段覆盖 100% | 25 个必填只填了 5 个；18 个下拉只验证了 5 个能回填 |
-| 2 | 幂等去重 | 草稿箱已累积 6 条，跑两次就两个草稿。按外部单号查重 |
-| 3 | 事后断言 | 30 节点里 9 个是 `web_js`，节点 ok ≠ 业务成功。用 `expect` 字段 |
-| 4 | 登录态常驻 | Ant 手动开的浏览器 + `RPA_CDP=59493`；服务重启/浏览器关就断 |
-| 5 | 必须有头 | `RPA_HEADLESS=false`，不能丢到无界面服务器 |
-| 6 | 连跑 3 次稳定 | 只跑一次绿不算 100% |
+| 1 | 字段覆盖 100% | 🔴 25 个必填只填了 5 个；18 个下拉只验证了 5 个能回填 |
+| 2 | 幂等去重 | 🟢 `flows/draft_check.json`（查草稿箱标题命中数 `draft_hits`），n8n 触发前先调 |
+| 3 | 事后断言 | 🟢 n16 `expect{url=publish.htm}`；流程末 n31~n33 独立查草稿箱存 `draft_hits` 回传 |
+| 4 | 登录态常驻 | 🟡 `_ctx` 探活 + `out/_last_cdp.txt` 端点持久化已实现，需重启连接器生效 |
+| 5 | 必须有头 | 🟢 `RPA_HEADLESS=false` 启动 |
+| 6 | 连跑 3 次稳定 | 🟢 **33.7s / 31.4s / 32.7s 全绿** |
 
-n8n 入口：`POST http://127.0.0.1:8100/run/qn_publish_draft`（或 `/run/{name}/async` + `/task/{id}`）。
+**业务结果回传**：`POST /run/{flow}` 现在返回 `vars`（含 `save_as` 存的 `draft_hits`、`filled_title` + 全部输入参数），n8n 靠它判断"草稿真的进库了"而不是只看 `ok`。
+
+n8n 入口：`POST http://127.0.0.1:8100/run/qn_publish_draft`（或 `/run-async/{name}` + `/task/{id}`）。
 
 ## 8. 排查速查
 

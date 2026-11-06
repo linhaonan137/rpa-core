@@ -183,6 +183,13 @@ def create_app(
                 "ok": result["ok"],
                 "ms": result["ms"],
                 "failed": result["failed"],
+                # 业务结果回传：流程里 save_as 存的变量（draft_hits / filled_title…）。
+                # 只看 ok 不知道"草稿真的进库了没有"，n8n 靠这个字段判断业务成功。
+                "vars": {
+                    k: v
+                    for k, v in (ctx.all_vars() or {}).items()
+                    if isinstance(v, (str, int, float, bool)) or v is None
+                },
                 "nodes": [
                     {"id": n["node_id"], "type": n["type"], "ok": n["ok"], "ms": n["ms"]}
                     for n in result["nodes"]

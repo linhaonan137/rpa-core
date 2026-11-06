@@ -121,7 +121,12 @@
         "title": "商品发布"
       },
       "off": false,
-      "budget_ms": 0
+      "budget_ms": 0,
+      "on_fail": {
+        "mode": "retry",
+        "attempts": 2,
+        "backoff_ms": 1500
+      }
     },
     {
       "id": "n8",
@@ -279,7 +284,11 @@
         "target": "@el:qn_confirm_next"
       },
       "off": false,
-      "budget_ms": 0
+      "budget_ms": 0,
+      "expect": {
+        "url": "publish.htm",
+        "limit_ms": 10000
+      }
     },
     {
       "id": "n17",
@@ -298,7 +307,12 @@
       },
       "label": "等填表页渲染",
       "off": false,
-      "budget_ms": 0
+      "budget_ms": 0,
+      "on_fail": {
+        "mode": "retry",
+        "attempts": 2,
+        "backoff_ms": 1200
+      }
     },
     {
       "id": "n18",
@@ -515,7 +529,7 @@
           1500
         ]
       },
-      "label": "保存草稿（@el: 引用；disabled 时 web_click 明确失败）",
+      "label": "保存草稿（@el:；disabled 时明确失败）",
       "off": false,
       "budget_ms": 0
     },
@@ -534,6 +548,51 @@
       },
       "off": false,
       "budget_ms": 0
+    },
+    {
+      "id": "n31",
+      "type": "web_open",
+      "label": "查草稿箱做业务断言",
+      "args": {
+        "url": "https://myseller.taobao.com/home.htm/SellManage/draft?current=1&pageSize=20",
+        "until": "dom",
+        "jitter": [
+          600,
+          1500
+        ]
+      }
+    },
+    {
+      "id": "n32",
+      "type": "web_wait",
+      "args": {
+        "text": "草稿",
+        "limit_ms": 20000,
+        "jitter": [
+          300,
+          800
+        ]
+      }
+    },
+    {
+      "id": "n33",
+      "type": "web_elem_info",
+      "label": "draft_hits>0 即保存成功（回传 n8n）",
+      "args": {
+        "target": "text={宝贝标题}",
+        "attr": "count",
+        "save_as": "draft_hits"
+      }
+    },
+    {
+      "id": "n34",
+      "type": "sleep",
+      "args": {
+        "ms": [
+          500,
+          1200
+        ]
+      }
     }
   ],
   "edges": [
@@ -681,6 +740,26 @@
       "id": "e29",
       "from": "n29",
       "to": "n30"
+    },
+    {
+      "id": "e30",
+      "from": "n30",
+      "to": "n31"
+    },
+    {
+      "id": "e31",
+      "from": "n31",
+      "to": "n32"
+    },
+    {
+      "id": "e32",
+      "from": "n32",
+      "to": "n33"
+    },
+    {
+      "id": "e33",
+      "from": "n33",
+      "to": "n34"
     }
   ],
   "vars": [

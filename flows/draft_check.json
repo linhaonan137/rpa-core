@@ -1,0 +1,73 @@
+{
+  "name": "草稿箱查重（n8n 幂等前置）",
+  "version": 1,
+  "vars": [
+    {
+      "name": "宝贝标题",
+      "value": "测试商品请勿拍下自动化验证用"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "web_open",
+      "args": {
+        "url": "https://myseller.taobao.com/home.htm/SellManage/draft?current=1&pageSize=20",
+        "until": "dom",
+        "jitter": [
+          600,
+          1500
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "web_wait",
+      "args": {
+        "text": "草稿",
+        "limit_ms": 20000,
+        "jitter": [
+          300,
+          800
+        ]
+      }
+    },
+    {
+      "id": "n3",
+      "type": "web_elem_info",
+      "label": "命中数 >0 即已存在",
+      "args": {
+        "target": "text={宝贝标题}",
+        "attr": "count",
+        "save_as": "draft_hits"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "sleep",
+      "args": {
+        "ms": [
+          500,
+          1200
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "id": "e2",
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "id": "e3",
+      "from": "n3",
+      "to": "n4"
+    }
+  ]
+}
