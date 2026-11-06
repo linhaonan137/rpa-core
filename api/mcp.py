@@ -1218,7 +1218,7 @@ async def element_pick(
     #    「发布商品」会撞到「发布商品时没有所需类目怎么办？」这种隐藏长文本
     if role and text:
         r = await _call("web_pick", {**base, "role": role, "name": text, "exact": True})
-        if r.get("ok"):
+        if r.get("ok") or (r.get("data") or {}).get("ambiguous"):
             return r
         selector = f"text={text}"
 
@@ -1230,7 +1230,7 @@ async def element_pick(
             f'[title="{esc}"], [name="{esc}"]'
         )
         r = await _call("web_pick", {**base, "selector": attr_sel})
-        if r.get("ok"):
+        if r.get("ok") or (r.get("data") or {}).get("ambiguous"):
             return r
         selector = f"text={text}"
 

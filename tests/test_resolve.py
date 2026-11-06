@@ -76,3 +76,103 @@ def test_text_overlap_empty_allows():
     """没文本可比（纯图标按钮）时放行，不能因为读不到文字就判失败。"""
     assert _text_overlap("", "abc")
     assert _text_overlap("abc", "")
+
+
+# ---------------------------------------------------------------- 层 0：容器锚点
+
+
+class _Inner:
+    def __init__(self, n: int = 1) -> None:
+        self.n = n
+
+    async def count(self) -> int:
+        return self.n
+
+    @property
+    def first(self):
+        return self
+
+    def nth(self, _i: int):
+        return self
+
+
+class _Box:
+    def __init__(self, inner: _Inner, n: int = 1) -> None:
+        self.inner, self.n = inner, n
+
+    async def count(self) -> int:
+        return self.n
+
+    def filter(self, **_kw):
+        return self
+
+    @property
+    def last(self):
+        return self
+
+    def locator(self, _sel: str):
+        return self.inner
+
+
+class _Page:
+    def __init__(self, inner: _Inner) -> None:
+        self.inner = inner
+
+    def locator(self, _sel: str, **_kw):
+        return _Box(self.inner)
+
+    def get_by_role(self, *_a, **_kw):
+        raise AssertionError("几何猜来的 name 不该走 role+name 层")
+
+
+@pytest.mark.asyncio
+async def test_anchor_layer_wins_for_same_name_inputs():
+    """18 个 placeholder=请选择 的下拉自身指纹一样 —— 只有 anchor 层能区分。"""
+    from elements.resolve import resolve_fingerprint
+
+    inner = _Inner(1)
+    entry = {
+        "role": "combobox", "name": "请选择",
+        "hints": {"anchor": {"label": "版型分类", "container": ".field-wrap",
+                             "target": "input[placeholder='请选择']", "index": 0}},
+    }
+    loc, diag = await resolve_fingerprint(_Page(inner), entry, key="x", limit_ms=0)
+    assert diag["layer"] == "anchor"
+    assert loc is inner
+
+
+@pytest.mark.asyncio
+async def test_geometry_name_never_uses_role_name():
+    """name 若是从横幅几何猜来的（qn_price_input 那种），不能再拿它匹配。"""
+    from elements.resolve import resolve_fingerprint
+
+    entry = {"role": "textbox", "name": "SKU参数填写面板已升级，",
+             "hints": {"name_source": "geometry"}}
+    _loc, diag = await resolve_fingerprint(_Page(_Inner(0)), entry, key="x", limit_ms=0)
+    assert not any("role+name" in str(t.get("layer")) for t in diag["tried"])
+
+
+@pytest.mark.asyncio
+async def test_pick_rejects_ambiguous_selector(tmp_path):
+    """匹配多个时拒绝拾取，不再静默取第 1 个（今天拾成「面料」就是这么来的）。"""
+    from engine.context import ExecutionContext
+    from nodes.picker import web_pick
+
+    class _CountLoc:
+        async def count(self) -> int:
+            return 14
+
+    class _PickPage:
+        def locator(self, _sel):
+            return _CountLoc()
+
+    ctx = ExecutionContext()
+    ctx.page = _PickPage()
+    ctx.elements = {}
+    r = await web_pick(
+        {"selector": ".default-items:has-text('版型分类') input", "key": "x",
+         "store": str(tmp_path / "e.json")},
+        ctx,
+    )
+    assert r.ok is False
+    assert r.data["ambiguous"] is True and r.data["matched"] == 14

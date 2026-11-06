@@ -18,7 +18,7 @@ from typing import Any
 _failed: dict[str, str] = {}
 
 #: 打包环境的兜底清单（PyInstaller 扫不到目录时用）
-_EXPLICIT = ["web", "data", "files", "system", "ai", "media", "trigger", "desktop", "picker", "net"]
+_EXPLICIT = ["web", "data", "files", "system", "ai", "media", "trigger", "desktop", "picker", "net", "el_action"]
 
 
 def load(name: str) -> Any:

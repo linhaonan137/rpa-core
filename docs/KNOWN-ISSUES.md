@@ -31,6 +31,41 @@
 | 深度筛查（5）| B3 `_settle` 解析失败不再抛（曾导致"点击已发生却报失败 → 重试重复点击"）、B2 `go_back/forward` 无历史不再报成功、B4 `web_fill_many` 全失败不再报成功、A2 CSV 落盘双 CR、C1 foreach 注入当前项（`{_item}`/`item_as`）|
 | **第三轮（9）**<br>端到端调用链 + 测试盲区视角 | **A1** `limit_ms` 在元素库定位里是死参数（`@el:` 只有 ~1s 窗口，冷启动必假失败）→ 改成按 `limit_ms` 轮询<br>**A2** body 非空但解析失败会静默用流程默认值跑完并报 ok（n8n 参数没进来就发测试商品）→ 现在 400<br>**A3** `_attach_shared` 在 `try` 外，浏览器不可达 → 裸 500 且无审计记录 → 现在 503 + 落库<br>**A4** `pages_before` 在锁外快照 → 会关掉等锁期间别人新开的页 → 快照移进锁内 + 只关 `_OWNED_PAGES`<br>**A5** `web_elem_info(attr=count)` 不等待、0 也成功（而它是 `draft_hits` 业务闸门）→ 加 `wait_for(attached)`<br>**B1** `_SubGraph.start` 兜底取 set 任意元素 → **嵌套循环随机跑 4 或 6 遍**（实测 6 次进程结果跳动）→ 取 loop 出口后继<br>**B2** `ctx._loop_items` 单值不是栈 → 内层循环 `{_item}` 取错行、外层残留 `None` → 进出栈恢复<br>**B3** `on_fail.then=skip` 在 `mode=retry` 下仍被忽略（K5 只修了 back 那一半）→ 统一判定<br>**B4** `exit="error"` 是永远走不到的假契约 → 从 `Exit` 移除并注明改用 `on_fail` |
 
+## 2.1 元素库能力补强（2026-11-06 15:50）
+
+针对"同构元素分不开、名字被横幅污染、拾取静默取第一个"三个反例：
+
+| 能力 | 实现 | 验证 |
+|---|---|---|
+| **层 0 容器锚点** | 采集时记 `anchor{label, container, target, index}`；定位时先按 label 筛表单项容器，再在容器内取目标。同构下拉靠字段名区分 | 真页面拾取尺码框：`layer=anchor, candidates=1` |
+| **采集语义约束** | label 候选宽度 ≤ 控件 2.2×、左边界对齐 ±32px、必须与控件共享 `form/field/item/wrapper` 容器；不达标标 `name_source=geometry`，定位时**跳过 role+name 层** | 单测 |
+| **歧义拒绝** | `web_pick` 匹配 >1 直接失败并返回 `ambiguous=True`（要取第一个必须显式 `allow_first=true`）；MCP 侧不再拿歧义结果往下降级试别的写法 | 真页面：14 个候选被拒绝 |
+| **回读校验** | 拾取先 `save=False`，用 `resolve_fingerprint` 回读；定位不到/不唯一就不入库。条目写 `meta.quality{layer,candidates,verified_at}` | 真页面 + 单测 |
+
+**交互配方（第 4 步骨架，已可用）**：`hints.interaction` 存"怎么点"，`web_el_action` 节点读数据自动跑，流程里不再每个字段写一串节点。
+
+```json
+"interaction": {
+  "open": "click",                   // click | hover | none
+  "choose": "first-option",          // first-option | {"index":n} | {"text":"..."} | null
+  "option_selector": "div.options-item",
+  "close": "click-blank",            // click-blank | click-finish | escape | none
+  "close_target": "text=商品属性",
+  "wait_ms": 450
+}
+```
+
+流程里写 `{"type":"web_el_action","args":{"key":"元素名"}}` 即可；规则也可在 `web_pick(interaction={...})` 时直接带上。
+
+**待填规则表**（用户给一行，我写一条数据）：
+
+| 控件 | open | choose | close | close_target |
+|---|---|---|---|---|
+| 多选下拉（面料等）| click | first-option | click-blank | `text=商品属性` |
+| 主图勾选框 | hover | — | click-blank | `text=基础上传要求` |
+| 尺码弹层 | click | `{"text":"175/88A"}` | click-finish | — |
+| 颜色面板 | click | — | escape | — |
+
 ## 3. 延后（⚠️ 到最后期限必须先修）
 
 ### 3.1 接 n8n / 批量上架之前

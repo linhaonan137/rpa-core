@@ -21,6 +21,50 @@ from engine.registry import Result, register
 DEFAULT_STORE = str(ELEMENTS_PATH)
 
 
+def _ambiguous(matched: int, key: str, desc: str) -> Result:
+    """歧义拾取：拒绝落库，而不是静默取第 1 个。"""
+    return Result.fail(
+        f"web_pick: 选择器匹配 {matched} 个，拒绝拾取（会拾错）。"
+        f"请加限定：label=字段名 / 容器 :has() / nth= / 或显式 allow_first=true",
+        data={"key": key, "matched": matched, "ambiguous": True, "selector": desc},
+    )
+
+
+def _flat(entry: Any) -> dict[str, Any]:
+    """ElementEntry -> resolve_fingerprint 要的扁平结构（与 web._library_entry 同口径）。"""
+    d = entry.to_dict()
+    fp = d.get("fingerprint") or {}
+    return {
+        "role": d.get("role"), "name": d.get("name"), "css": d.get("css"),
+        "attrs": fp.get("attrs") or {}, "path": fp.get("path") or [],
+        "siblings": fp.get("siblings") or [], "geometry": fp.get("geometry") or {},
+        "tag": fp.get("tag") or "", "frame": fp.get("frame") or [],
+        "label": (d.get("hints") or {}).get("label") or "",
+        "hints": d.get("hints") or {},
+    }
+
+
+async def _verify(page: Any, ctx: ExecutionContext, entry: Any, key: str) -> tuple[bool, dict[str, Any]]:
+    """拾取后立刻回读：库里这条现在能不能唯一定位到。"""
+    from elements.resolve import resolve_fingerprint
+    from nodes.web import _root
+
+    try:
+        loc, diag = await resolve_fingerprint(
+            _root(page, ctx), _flat(entry), key=key, limit_ms=3000
+        )
+        if loc is None:
+            return False, {"layer": None, "tried": len(diag.get("tried") or [])}
+        try:
+            n = await loc.count()
+        except Exception:  # noqa: BLE001
+            n = 1
+        return True, {"layer": diag.get("layer"), "candidates": n,
+                      "tried": len(diag.get("tried") or [])}
+    except Exception as exc:  # noqa: BLE001
+        return False, {"error": f"{type(exc).__name__}"}
+
+
 def _store_path(args: dict[str, Any]) -> str:
     return str(args.get("store") or os.getenv("RPA_ELEMENTS") or ELEMENTS_PATH)
 
@@ -44,6 +88,8 @@ async def web_pick(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     name = (args.get("name") or "").strip()
     exact = bool(args.get("exact", True))
     key = args.get("key")
+    allow_first = bool(args.get("allow_first", False))
+    desc = str(selector or target or (f"role={role}[name={name}]" if role else ""))
     if not selector and not target and not (role and name):
         return Result.fail("web_pick: 缺 selector / target / role+name")
     if not key:
@@ -61,8 +107,10 @@ async def web_pick(args: dict[str, Any], ctx: ExecutionContext) -> Result:
             matched = await loc.count()
             if matched == 0:
                 return Result.fail(f"web_pick: 没有 {role}[name={name!r}] 的元素")
+            if matched > 1 and not allow_first:
+                return _ambiguous(matched, str(key), desc)
             entry = await capture(
-                ctx.page, None, str(key), store=store,
+                ctx.page, None, str(key), store=store, save=False,
                 frame_chain=args.get("frame_chain"),
                 limit_ms=int(args.get("limit_ms", 10_000)),
                 locator=loc.first,
@@ -79,11 +127,14 @@ async def web_pick(args: dict[str, Any], ctx: ExecutionContext) -> Result:
                 matched = await loc.count()
             except Exception:  # noqa: BLE001
                 matched = 0
+            if matched > 1 and not allow_first:
+                return _ambiguous(matched, str(key), desc)
             entry = await capture(
                 ctx.page,
                 None,
                 str(key),
                 store=store,
+                save=False,
                 frame_chain=args.get("frame_chain"),
                 limit_ms=int(args.get("limit_ms", 10_000)),
                 locator=first,
@@ -93,11 +144,14 @@ async def web_pick(args: dict[str, Any], ctx: ExecutionContext) -> Result:
                 matched = await ctx.page.locator(str(selector)).count()
             except Exception:  # noqa: BLE001
                 matched = 0
+            if matched > 1 and not allow_first:
+                return _ambiguous(matched, str(key), desc)
             entry = await capture(
                 ctx.page,
                 str(selector),
                 str(key),
                 store=store,
+                save=False,
                 frame_chain=args.get("frame_chain"),
                 limit_ms=int(args.get("limit_ms", 10_000)),
             )
@@ -106,17 +160,36 @@ async def web_pick(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     except Exception as exc:  # noqa: BLE001 - 抓取失败统一转结果
         return Result.fail(f"web_pick: {type(exc).__name__}: {exc}")
 
+    # 交互配方（open/choose/close）随元素一起存，供 web_el_action 读取
+    interaction = args.get("interaction")
+    if isinstance(interaction, dict) and interaction:
+        entry.hints["interaction"] = dict(interaction)
+
+    # 拾取后回读校验：定位不到 / 命中多个就不许入库（止住脏条目）
+    ok, quality = await _verify(ctx.page, ctx, entry, str(key))
+    if not ok:
+        return Result.fail(
+            f"web_pick: 回读校验失败 {quality} —— 这条指纹现在定位不到，未写入元素库",
+            data={"key": key, "quality": quality, "verification_failed": True},
+        )
+
+    import time as _time
+
+    entry.meta["quality"] = {**quality, "verified_at": _time.strftime("%Y-%m-%dT%H:%M:%S")}
+    store.add(entry, overwrite=True)
+    store.save()
+
     where = f"{entry.role or '?'}/{entry.name or '?'}"
     # 同时写进内存，同一进程里后续节点立刻能用 @el:<key>
     if isinstance(ctx.elements, dict):
         # 存**全量**（to_dict 带六维指纹），定位器才能用上 attrs/path/siblings/geometry
         ctx.elements[str(key)] = entry.to_dict()
-    # 匹配多个时只取第一个，必须显式告诉调用方 —— 否则拾错了也没人知道
-    hint = f"；⚠ 匹配 {matched} 个，已取第 1 个（要准就加限定）" if matched > 1 else ""
+    hint = "" if matched <= 1 else "；⚠ 显式 allow_first=true，已取第 1 个"
     return Result.done(
-        f"已拾取 @el:{key} → {where}{hint}（存 {path}）",
+        f"已拾取 @el:{key} → {where}（校验 {quality.get('layer')}，候选 {quality.get('candidates')}）{hint}（存 {path}）",
         data={"key": key, "role": entry.role, "name": entry.name,
-              "matched": matched, "store": path},
+              "matched": matched, "store": path, "quality": quality,
+              "anchor": (entry.hints or {}).get("anchor")},
     )
 
 

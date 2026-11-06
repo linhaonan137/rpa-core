@@ -36,10 +36,10 @@ JS_CAPTURE = r"""
   // 阿里 next-design 的 Form.Item 是「label 在上、控件在下，垂直间距 ~24px」，
   // 淘宝发品页 25 个下拉框 placeholder 全是"请选择/请输入"、无 id 无 name，
   // 不这样找完全无法区分（实测间距 24px）。
-  const labelOf = (e) => {
-    if (!/^(INPUT|SELECT|TEXTAREA)$/.test(e.tagName)) return "";
+  const labelMeta = (e) => {
+    if (!/^(INPUT|SELECT|TEXTAREA)$/.test(e.tagName)) return { text: "", source: "", el: null };
     const r0 = e.getBoundingClientRect();
-    let best = "", bestDy = 999;
+    let best = null, bestDy = 999;
     for (const c of document.querySelectorAll("label, dt, th, span, div")) {
       if (c === e || c.contains(e)) continue;
       const cr = c.getBoundingClientRect();
@@ -47,14 +47,58 @@ JS_CAPTURE = r"""
       const dy = r0.y - cr.y;
       if (dy < 2 || dy > 34) continue;
       if (cr.x > r0.x + r0.width || cr.x + cr.width < r0.x) continue;
-      // 只要"自己带文本"的元素，避免抓到整块容器
+      // 硬约束：公告横幅是全宽，比控件宽得多，不可能是它的 label（实测
+      // qn_price_input 的 name 曾被采成「SKU参数填写面板已升级，」）
+      if (cr.width > r0.width * 2.2) continue;
+      // 同一列的标签才跟控件左对齐
+      if (Math.abs(cr.x - r0.x) > 32) continue;
       const direct = Array.from(c.childNodes)
         .filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join("").trim();
       if (!direct || direct.length < 2 || direct.length > 16) continue;
       if (/^[\*＊]|^(重要|必填|选填)$/.test(direct)) continue;
-      if (dy < bestDy) { best = direct; bestDy = dy; }
+      // 语义校验：候选与控件是否共享同一个表单项容器
+      let p = c, shared = false;
+      for (let i = 0; i < 5 && p; i++) {
+        if (p.contains && p.contains(e)) {
+          shared = /form|field|item|wrapper|label/i.test(String(p.className || ""));
+          if (shared) break;
+        }
+        p = p.parentElement;
+      }
+      if (dy < bestDy) { best = { text: direct, source: shared ? "semantic" : "geometry", el: c }; bestDy = dy; }
     }
-    return best;
+    return best || { text: "", source: "", el: null };
+  };
+  const labelOf = (e) => labelMeta(e).text;
+
+  // ---------------------------------------------------------- 第 0.5 层：容器锚点
+  // 同构元素（18 个 placeholder=请选择 的下拉）自身指纹完全一样，
+  // 只能靠「字段名 label + 它所在的表单项容器」区分。存下来让 resolve 走层 0。
+  const anchorOf = (e) => {
+    const out = { label: "", container: "", target: "", index: 0, source: "" };
+    const meta = labelMeta(e);
+    if (!meta.text || !meta.el) return out;
+    out.label = meta.text;
+    out.source = meta.source;
+    let p = meta.el.parentElement;
+    for (let i = 0; i < 6 && p; i++) {
+      if (p.contains(e)) {
+        const cls = String(p.className || "").trim().split(/\s+/)
+          .find(c => c && c.length > 3 && !/__[A-Za-z0-9]{5,}$/.test(c));
+        if (cls) {
+          out.container = "." + cls;
+          const tag = e.tagName.toLowerCase();
+          const ph = (e.getAttribute("placeholder") || "").trim();
+          out.target = ph ? tag + "[placeholder=\"" + ph.replace(/"/g, '\\"') + "\"]" : tag;
+          try {
+            out.index = Math.max(0, Array.from(p.querySelectorAll(out.target)).indexOf(e));
+          } catch (_) { out.index = 0; }
+        }
+        break;
+      }
+      p = p.parentElement;
+    }
+    return out;
   };
 
   // ---------------------------------------------------------- 第 1 层：可访问名
@@ -84,7 +128,7 @@ JS_CAPTURE = r"""
     // 表单控件优先用「上方 label」：placeholder 往往 20 个框都是"请选择"，
     // 毫无区分度；上方 label 才是真名字（袖长类型 / 上市年份季节 / 功能…）
     const lf = labelOf(e);
-    if (lf) return lf;
+    if (labelMeta(e).source === "semantic" && lf) return lf;
     for (const a of ["placeholder", "title", "alt"]) {
       const v = (e.getAttribute(a) || "").trim();
       if (v) return v;
@@ -217,6 +261,8 @@ JS_CAPTURE = r"""
     tag: el.tagName.toLowerCase(),
     role: role, name: name, attrs: attrs,
     label: labelOf(el),   // 单独留一份：定位时优先用 label 找控件（比 path 稳）
+    name_source: labelMeta(el).source || "accname",
+    anchor: anchorOf(el), // 层 0：字段名 label + 表单项容器（治同构元素）
     path: stablePath(el),
     frame: (window.__rpa_frame_chain && window.__rpa_frame_chain.length)
              ? window.__rpa_frame_chain : autoFrame(),
@@ -279,6 +325,13 @@ def raw_to_entry(raw: dict[str, Any], key: str, *, source: str = "picker") -> El
         # 表单 label 单独留一份：定位时用「label 文本 + 位置」找控件，
         # 比 path 稳得多（path 会随页面结构变，label 是业务语义）
         hints["label"] = lbl
+    anchor = raw.get("anchor") or {}
+    if isinstance(anchor, dict) and anchor.get("label") and anchor.get("container"):
+        hints["anchor"] = anchor
+    # 名字是几何猜来的（如公告横幅文案）→ 定位时不能用 role+name 当主依据
+    src = str(raw.get("name_source") or "").strip()
+    if src:
+        hints["name_source"] = src
 
     return ElementEntry(
         key=key,

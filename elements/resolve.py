@@ -179,9 +179,39 @@ async def resolve_fingerprint(
     name = (entry.get("name") or "").strip()
     attrs = entry.get("attrs") or {}
     tag = (entry.get("tag") or "").strip()
+    hints = entry.get("hints") or {}
+
+    # ---------------------------------------------- 层 0：表单容器锚点
+    # 同构元素（18 个 placeholder=请选择 的下拉）自身 role/name/path 几乎一样，
+    # 八层都分不开。靠采集时记下的「字段名 label + 它所在的表单项容器」定位：
+    # 先按 label 文本筛容器，再在容器内取目标控件。这是唯一稳定的语义区分维度。
+    anchor = hints.get("anchor") or entry.get("anchor") or {}
+    a_label = str(anchor.get("label") or "").strip()
+    a_container = str(anchor.get("container") or "").strip()
+    a_target = str(anchor.get("target") or "").strip() or "input,select,textarea"
+    if a_label and a_container:
+        try:
+            boxes = page.locator(a_container).filter(has_text=a_label)
+            nb = await _count(boxes)
+            diag["tried"].append(
+                {"layer": "anchor", "count": nb, "sel": f"{a_container} [label={a_label!r}]"}
+            )
+            if nb:
+                inner = boxes.last.locator(a_target)   # .last = 最深的那个表单项容器
+                ni = await _count(inner)
+                idx = int(anchor.get("index") or 0)
+                if ni == 1 or ni > idx:
+                    diag["layer"] = "anchor"
+                    return (inner.first if ni == 1 else inner.nth(idx)), diag
+        except Exception as exc:  # noqa: BLE001
+            diag["tried"].append({"layer": "anchor", "error": f"{type(exc).__name__}"})
+
+    # 名字是几何猜出来的（如公告横幅文案），不能拿它当主依据 ——
+    # 否则「SKU参数填写面板已升级」会去匹配页面横幅而不是价格输入框。
+    name_guessed = str(hints.get("name_source") or "") == "geometry"
 
     # ---------------------------------------------- 层 1：role + name
-    if role and name:
+    if role and name and not name_guessed:
         try:
             # 精确优先：Playwright 的 name 匹配默认是子串，
             # 「发布商品」会同时命中「发布商品时没有所需类目怎么办？」，

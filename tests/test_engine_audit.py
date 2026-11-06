@@ -123,3 +123,90 @@ async def test_settle_never_raises_on_bad_jitter():
     await _settle({"jitter": [1, 2]})         # 正常列表
     await _settle({"jitter": 1})              # 单值
     await _settle({})                         # 没配
+
+
+# ---------------------------------------------------------------- 交互配方节点
+
+
+class _FakeEl:
+    def __init__(self, log: list[str], name: str = "") -> None:
+        self.log, self.name = log, name
+
+    async def click(self, **_kw) -> None:
+        self.log.append("click:" + self.name)
+
+    async def hover(self, **_kw) -> None:
+        self.log.append("hover:" + self.name)
+
+
+class _FakeLoc:
+    def __init__(self, log: list[str], name: str) -> None:
+        self.log, self.name = log, name
+        self.first = _FakeEl(log, name)
+
+    def nth(self, i: int) -> _FakeEl:
+        return _FakeEl(self.log, f"{self.name}#{i}")
+
+
+class _FakePage:
+    def __init__(self, log: list[str]) -> None:
+        self.log = log
+        self.keyboard = self
+
+    def locator(self, sel: str) -> _FakeLoc:
+        return _FakeLoc(self.log, sel)
+
+    def get_by_text(self, _t: str, **_kw) -> _FakeLoc:
+        return _FakeLoc(self.log, "text")
+
+    async def press(self, key: str) -> None:
+        self.log.append("key:" + key)
+
+
+async def test_el_action_runs_interaction_recipe(monkeypatch):
+    """交互规则写进数据：点开 → 选第一项 → 点容器外空白（不再每个字段硬写节点）。"""
+    import nodes.web as web
+    from nodes.el_action import web_el_action
+
+    log: list[str] = []
+    page = _FakePage(log)
+
+    async def _fake_locate(_page, _target, _hints, _ctx, _limit):
+        return _FakeLoc(log, "target")
+
+    monkeypatch.setattr(web, "_locate", _fake_locate)
+    ctx = ExecutionContext()
+    ctx.page = page
+
+    r = await web_el_action(
+        {"target": "css=input.x",
+         "interaction": {"open": "click", "choose": "first-option",
+                         "close": "click-blank", "close_target": "text=商品属性",
+                         "wait_ms": 0}},
+        ctx,
+    )
+    assert r.ok is True
+    assert any(s.startswith("click:target") for s in log)
+    assert any(s.startswith("click:div.options-item") for s in log)
+    assert any(s.startswith("click:text=商品属性") for s in log)
+
+
+async def test_el_action_escape_close(monkeypatch):
+    import nodes.web as web
+    from nodes.el_action import web_el_action
+
+    log: list[str] = []
+
+    async def _fake_locate(_page, _target, _hints, _ctx, _limit):
+        return _FakeLoc(log, "target")
+
+    monkeypatch.setattr(web, "_locate", _fake_locate)
+    ctx = ExecutionContext()
+    ctx.page = _FakePage(log)
+    r = await web_el_action(
+        {"target": "css=input.x",
+         "interaction": {"open": "hover", "close": "escape", "wait_ms": 0}},
+        ctx,
+    )
+    assert r.ok is True
+    assert "hover:target" in log and "key:Escape" in log
