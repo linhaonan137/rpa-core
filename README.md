@@ -90,7 +90,9 @@ rpa.exe run flows\demo.json
 | `web_fill` | `web_type` |
 | `web_network` | `web_net` |
 
-`web_open` / `web_click` / `web_extract` / `web_wait` / `sleep` / `web_key` / `web_upload` / `data_sheet_write` 是同名的。
+`web_open` / `web_click` / `web_extract` / `web_wait` / `web_key` 是同名的。
+
+⚠️ `sleep` 和 `web_upload` **没有同名 MCP 工具**：前者用 `call_node("sleep", {"ms": ...})`，后者用 `web_fill(kind=upload)`。
 
 ### iframe、键盘、流程回放的三条边界（实测）
 
@@ -297,6 +299,7 @@ python main.py run flows/real_1_quotes.json
 | [`docs/REAL-MOUSE.md`](docs/REAL-MOUSE.md) | 真实鼠标：实现与四个坑 |
 | [`docs/LESSONS.md`](docs/LESSONS.md) | 踩坑台账（按「再犯一次会疼多久」排序）|
 | [`docs/WAITING.md`](docs/WAITING.md) | **等待策略：等元素而不是 sleep，元素出现后加随机抖动** |
+| [`docs/TAOBAO-PUBLISH.md`](docs/TAOBAO-PUBLISH.md) | **淘宝上架流程实操知识：逐节点注意事项、MCP 覆盖、元素库体检** |
 
 > 文档纪律：**会变的数字只在下方「规模」一节维护**，其余文档一律指向代码（`list_node_types` / `api/mcp.py`），避免同一事实在多处腐烂。
 
