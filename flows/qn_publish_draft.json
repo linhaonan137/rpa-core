@@ -1,5 +1,5 @@
 {
-  "name": "千牛发商品存草稿（端到端：选类目→填表→保存草稿）",
+  "name": "千牛发商品存草稿（主图5张+属性下拉+SKU价格库存+保存草稿）",
   "version": 1,
   "nodes": [
     {
@@ -357,77 +357,730 @@
       "budget_ms": 0
     },
     {
-      "id": "n20",
       "type": "web_click",
-      "position": {
-        "x": 0.0,
-        "y": 0.0
-      },
+      "label": "主图1：点空位",
       "args": {
+        "target": "div.image-empty >> nth=0",
         "jitter": [
           300,
           700
-        ],
-        "target": "@el:qn_color_input"
+        ]
       },
-      "off": false,
-      "budget_ms": 0
+      "id": "n20"
     },
     {
-      "id": "n21",
       "type": "web_wait",
-      "position": {
-        "x": 0.0,
-        "y": 0.0
-      },
+      "label": "主图1：等素材 iframe",
       "args": {
+        "target": "iframe#mainImagesGroup",
+        "kind": "attached",
+        "limit_ms": 12000,
         "jitter": [
           300,
-          700
-        ],
-        "kind": "visible",
+          600
+        ]
+      },
+      "id": "n21"
+    },
+    {
+      "type": "web_frame_in",
+      "label": "主图1：进 iframe",
+      "args": {
+        "kind": "target",
+        "target": "iframe#mainImagesGroup"
+      },
+      "id": "n22"
+    },
+    {
+      "type": "web_click",
+      "label": "主图1：点本地上传",
+      "args": {
+        "target": "text=本地上传",
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n23"
+    },
+    {
+      "type": "web_wait",
+      "label": "主图1：等文件框",
+      "args": {
+        "target": "input[type=file]",
+        "kind": "attached",
         "limit_ms": 10000,
-        "target": "div.color-item-content"
+        "jitter": [
+          300,
+          600
+        ]
       },
-      "off": false,
-      "budget_ms": 0
+      "id": "n24"
     },
     {
-      "id": "n22",
-      "type": "web_js",
-      "position": {
-        "x": 0.0,
-        "y": 0.0
-      },
+      "type": "web_upload",
+      "label": "主图1：选本地文件",
       "args": {
-        "code": "() => { const el = [...document.querySelectorAll('div.color-item-content')].find(e => (e.innerText||'').replace(/\\s+/g,'').trim() === '白色系'); if (!el) throw new Error('找不到白色系'); el.click(); return '白色系'; }",
+        "target": "input[type=file]",
+        "path": "{主图1}"
+      },
+      "id": "n25"
+    },
+    {
+      "type": "web_js",
+      "label": "主图1：点完成+选中图片",
+      "args": {
+        "code": "async () => {\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const btn = [...document.querySelectorAll('button')]\n    .find(b => (b.innerText || '').trim() === '完成');\n  if (btn) { btn.click(); await sleep(1200); }\n  const card = document.querySelector('[class*=pic_imgBox]');\n  if (!card) return 'no-card';\n  const r = card.getBoundingClientRect();\n  ['mouseover', 'mouseenter', 'mousemove'].forEach(function (t) {\n    card.dispatchEvent(new MouseEvent(t, { bubbles: true, clientX: r.x + 5, clientY: r.y + 5 }));\n  });\n  await sleep(350);\n  const cb = document.querySelector('.PicList_checkbox__769at');\n  if (cb) { cb.click(); await sleep(300); }\n  const inp = cb ? cb.querySelector('input') : null;\n  return { checked: inp ? inp.getAttribute('aria-checked') : 'clicked-card' };\n}",
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n26",
+      "on_fail": {
+        "mode": "retry",
+        "attempts": 2,
+        "backoff_ms": 600
+      }
+    },
+    {
+      "type": "web_frame_out",
+      "label": "主图1：回主文档",
+      "args": {},
+      "id": "n27"
+    },
+    {
+      "type": "web_click",
+      "label": "主图1：点容器外确认",
+      "args": {
+        "target": "text=基础上传要求",
+        "limit_ms": 6000,
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n28",
+      "on_fail": {
+        "mode": "skip"
+      }
+    },
+    {
+      "type": "web_click",
+      "label": "主图2：点空位",
+      "args": {
+        "target": "div.image-empty >> nth=0",
         "jitter": [
           300,
           700
         ]
       },
-      "off": false,
-      "budget_ms": 0
+      "id": "n29"
     },
     {
-      "id": "n23",
-      "type": "web_js",
-      "position": {
-        "x": 0.0,
-        "y": 0.0
-      },
+      "type": "web_wait",
+      "label": "主图2：等素材 iframe",
       "args": {
-        "code": "() => { const els = [...document.querySelectorAll('div.color-item-content')].filter(e => (e.innerText||'').replace(/\\s+/g,'').trim() === '白色'); if (!els.length) throw new Error('找不到白色'); els[0].click(); return '白色'; }",
+        "target": "iframe#mainImagesGroup",
+        "kind": "attached",
+        "limit_ms": 12000,
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n30"
+    },
+    {
+      "type": "web_frame_in",
+      "label": "主图2：进 iframe",
+      "args": {
+        "kind": "target",
+        "target": "iframe#mainImagesGroup"
+      },
+      "id": "n31"
+    },
+    {
+      "type": "web_click",
+      "label": "主图2：点本地上传",
+      "args": {
+        "target": "text=本地上传",
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n32"
+    },
+    {
+      "type": "web_wait",
+      "label": "主图2：等文件框",
+      "args": {
+        "target": "input[type=file]",
+        "kind": "attached",
+        "limit_ms": 10000,
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n33"
+    },
+    {
+      "type": "web_upload",
+      "label": "主图2：选本地文件",
+      "args": {
+        "target": "input[type=file]",
+        "path": "{主图2}"
+      },
+      "id": "n34"
+    },
+    {
+      "type": "web_js",
+      "label": "主图2：点完成+选中图片",
+      "args": {
+        "code": "async () => {\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const btn = [...document.querySelectorAll('button')]\n    .find(b => (b.innerText || '').trim() === '完成');\n  if (btn) { btn.click(); await sleep(1200); }\n  const card = document.querySelector('[class*=pic_imgBox]');\n  if (!card) return 'no-card';\n  const r = card.getBoundingClientRect();\n  ['mouseover', 'mouseenter', 'mousemove'].forEach(function (t) {\n    card.dispatchEvent(new MouseEvent(t, { bubbles: true, clientX: r.x + 5, clientY: r.y + 5 }));\n  });\n  await sleep(350);\n  const cb = document.querySelector('.PicList_checkbox__769at');\n  if (cb) { cb.click(); await sleep(300); }\n  const inp = cb ? cb.querySelector('input') : null;\n  return { checked: inp ? inp.getAttribute('aria-checked') : 'clicked-card' };\n}",
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n35",
+      "on_fail": {
+        "mode": "retry",
+        "attempts": 2,
+        "backoff_ms": 600
+      }
+    },
+    {
+      "type": "web_frame_out",
+      "label": "主图2：回主文档",
+      "args": {},
+      "id": "n36"
+    },
+    {
+      "type": "web_click",
+      "label": "主图2：点容器外确认",
+      "args": {
+        "target": "text=基础上传要求",
+        "limit_ms": 6000,
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n37",
+      "on_fail": {
+        "mode": "skip"
+      }
+    },
+    {
+      "type": "web_click",
+      "label": "主图3：点空位",
+      "args": {
+        "target": "div.image-empty >> nth=0",
         "jitter": [
           300,
           700
         ]
       },
-      "off": false,
-      "budget_ms": 0
+      "id": "n38"
     },
     {
-      "id": "n24",
+      "type": "web_wait",
+      "label": "主图3：等素材 iframe",
+      "args": {
+        "target": "iframe#mainImagesGroup",
+        "kind": "attached",
+        "limit_ms": 12000,
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n39"
+    },
+    {
+      "type": "web_frame_in",
+      "label": "主图3：进 iframe",
+      "args": {
+        "kind": "target",
+        "target": "iframe#mainImagesGroup"
+      },
+      "id": "n40"
+    },
+    {
+      "type": "web_click",
+      "label": "主图3：点本地上传",
+      "args": {
+        "target": "text=本地上传",
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n41"
+    },
+    {
+      "type": "web_wait",
+      "label": "主图3：等文件框",
+      "args": {
+        "target": "input[type=file]",
+        "kind": "attached",
+        "limit_ms": 10000,
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n42"
+    },
+    {
+      "type": "web_upload",
+      "label": "主图3：选本地文件",
+      "args": {
+        "target": "input[type=file]",
+        "path": "{主图3}"
+      },
+      "id": "n43"
+    },
+    {
+      "type": "web_js",
+      "label": "主图3：点完成+选中图片",
+      "args": {
+        "code": "async () => {\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const btn = [...document.querySelectorAll('button')]\n    .find(b => (b.innerText || '').trim() === '完成');\n  if (btn) { btn.click(); await sleep(1200); }\n  const card = document.querySelector('[class*=pic_imgBox]');\n  if (!card) return 'no-card';\n  const r = card.getBoundingClientRect();\n  ['mouseover', 'mouseenter', 'mousemove'].forEach(function (t) {\n    card.dispatchEvent(new MouseEvent(t, { bubbles: true, clientX: r.x + 5, clientY: r.y + 5 }));\n  });\n  await sleep(350);\n  const cb = document.querySelector('.PicList_checkbox__769at');\n  if (cb) { cb.click(); await sleep(300); }\n  const inp = cb ? cb.querySelector('input') : null;\n  return { checked: inp ? inp.getAttribute('aria-checked') : 'clicked-card' };\n}",
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n44",
+      "on_fail": {
+        "mode": "retry",
+        "attempts": 2,
+        "backoff_ms": 600
+      }
+    },
+    {
+      "type": "web_frame_out",
+      "label": "主图3：回主文档",
+      "args": {},
+      "id": "n45"
+    },
+    {
+      "type": "web_click",
+      "label": "主图3：点容器外确认",
+      "args": {
+        "target": "text=基础上传要求",
+        "limit_ms": 6000,
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n46",
+      "on_fail": {
+        "mode": "skip"
+      }
+    },
+    {
+      "type": "web_click",
+      "label": "主图4：点空位",
+      "args": {
+        "target": "div.image-empty >> nth=0",
+        "jitter": [
+          300,
+          700
+        ]
+      },
+      "id": "n47"
+    },
+    {
+      "type": "web_wait",
+      "label": "主图4：等素材 iframe",
+      "args": {
+        "target": "iframe#mainImagesGroup",
+        "kind": "attached",
+        "limit_ms": 12000,
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n48"
+    },
+    {
+      "type": "web_frame_in",
+      "label": "主图4：进 iframe",
+      "args": {
+        "kind": "target",
+        "target": "iframe#mainImagesGroup"
+      },
+      "id": "n49"
+    },
+    {
+      "type": "web_click",
+      "label": "主图4：点本地上传",
+      "args": {
+        "target": "text=本地上传",
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n50"
+    },
+    {
+      "type": "web_wait",
+      "label": "主图4：等文件框",
+      "args": {
+        "target": "input[type=file]",
+        "kind": "attached",
+        "limit_ms": 10000,
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n51"
+    },
+    {
+      "type": "web_upload",
+      "label": "主图4：选本地文件",
+      "args": {
+        "target": "input[type=file]",
+        "path": "{主图4}"
+      },
+      "id": "n52"
+    },
+    {
+      "type": "web_js",
+      "label": "主图4：点完成+选中图片",
+      "args": {
+        "code": "async () => {\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const btn = [...document.querySelectorAll('button')]\n    .find(b => (b.innerText || '').trim() === '完成');\n  if (btn) { btn.click(); await sleep(1200); }\n  const card = document.querySelector('[class*=pic_imgBox]');\n  if (!card) return 'no-card';\n  const r = card.getBoundingClientRect();\n  ['mouseover', 'mouseenter', 'mousemove'].forEach(function (t) {\n    card.dispatchEvent(new MouseEvent(t, { bubbles: true, clientX: r.x + 5, clientY: r.y + 5 }));\n  });\n  await sleep(350);\n  const cb = document.querySelector('.PicList_checkbox__769at');\n  if (cb) { cb.click(); await sleep(300); }\n  const inp = cb ? cb.querySelector('input') : null;\n  return { checked: inp ? inp.getAttribute('aria-checked') : 'clicked-card' };\n}",
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n53",
+      "on_fail": {
+        "mode": "retry",
+        "attempts": 2,
+        "backoff_ms": 600
+      }
+    },
+    {
+      "type": "web_frame_out",
+      "label": "主图4：回主文档",
+      "args": {},
+      "id": "n54"
+    },
+    {
+      "type": "web_click",
+      "label": "主图4：点容器外确认",
+      "args": {
+        "target": "text=基础上传要求",
+        "limit_ms": 6000,
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n55",
+      "on_fail": {
+        "mode": "skip"
+      }
+    },
+    {
+      "type": "web_click",
+      "label": "主图5：点空位",
+      "args": {
+        "target": "div.image-empty >> nth=0",
+        "jitter": [
+          300,
+          700
+        ]
+      },
+      "id": "n56"
+    },
+    {
+      "type": "web_wait",
+      "label": "主图5：等素材 iframe",
+      "args": {
+        "target": "iframe#mainImagesGroup",
+        "kind": "attached",
+        "limit_ms": 12000,
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n57"
+    },
+    {
+      "type": "web_frame_in",
+      "label": "主图5：进 iframe",
+      "args": {
+        "kind": "target",
+        "target": "iframe#mainImagesGroup"
+      },
+      "id": "n58"
+    },
+    {
+      "type": "web_click",
+      "label": "主图5：点本地上传",
+      "args": {
+        "target": "text=本地上传",
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n59"
+    },
+    {
+      "type": "web_wait",
+      "label": "主图5：等文件框",
+      "args": {
+        "target": "input[type=file]",
+        "kind": "attached",
+        "limit_ms": 10000,
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n60"
+    },
+    {
+      "type": "web_upload",
+      "label": "主图5：选本地文件",
+      "args": {
+        "target": "input[type=file]",
+        "path": "{主图5}"
+      },
+      "id": "n61"
+    },
+    {
+      "type": "web_js",
+      "label": "主图5：点完成+选中图片",
+      "args": {
+        "code": "async () => {\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const btn = [...document.querySelectorAll('button')]\n    .find(b => (b.innerText || '').trim() === '完成');\n  if (btn) { btn.click(); await sleep(1200); }\n  const card = document.querySelector('[class*=pic_imgBox]');\n  if (!card) return 'no-card';\n  const r = card.getBoundingClientRect();\n  ['mouseover', 'mouseenter', 'mousemove'].forEach(function (t) {\n    card.dispatchEvent(new MouseEvent(t, { bubbles: true, clientX: r.x + 5, clientY: r.y + 5 }));\n  });\n  await sleep(350);\n  const cb = document.querySelector('.PicList_checkbox__769at');\n  if (cb) { cb.click(); await sleep(300); }\n  const inp = cb ? cb.querySelector('input') : null;\n  return { checked: inp ? inp.getAttribute('aria-checked') : 'clicked-card' };\n}",
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n62",
+      "on_fail": {
+        "mode": "retry",
+        "attempts": 2,
+        "backoff_ms": 600
+      }
+    },
+    {
+      "type": "web_frame_out",
+      "label": "主图5：回主文档",
+      "args": {},
+      "id": "n63"
+    },
+    {
+      "type": "web_click",
+      "label": "主图5：点容器外确认",
+      "args": {
+        "target": "text=基础上传要求",
+        "limit_ms": 6000,
+        "jitter": [
+          400,
+          800
+        ]
+      },
+      "id": "n64",
+      "on_fail": {
+        "mode": "skip"
+      }
+    },
+    {
+      "type": "web_js",
+      "label": "属性·版型分类：点开选第一个",
+      "args": {
+        "code": "async () => {\n  const NAME = '版型分类';\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const lab = [...document.querySelectorAll('.sell-component-info-wrapper-label')]\n    .find(e => (e.innerText || '').trim() === NAME);\n  if (!lab) return NAME + ':no-label';\n  let p = lab, inp = null, h = 0;\n  while (p && h < 5) {\n    inp = p.querySelector(\"input[placeholder='请选择']\");\n    if (inp) break;\n    p = p.parentElement; h++;\n  }\n  if (!inp) return NAME + ':no-input';\n  const wrap = inp.parentElement;\n  const cur = wrap && wrap.querySelector('.next-select-values');\n  if (cur && (cur.innerText || '').indexOf('请选择') < 0) return NAME + ':already';\n  inp.click();\n  await sleep(450);\n  const ov = document.querySelector('.next-overlay-wrapper.opened');\n  const first = ov ? ov.querySelector('div.options-item') : null;\n  if (!first) return NAME + ':no-option';\n  const picked = (first.innerText || '').replace(/\\s+/g, '').trim().slice(0, 10);\n  first.click();\n  await sleep(280);\n  return NAME + '=' + picked;\n}",
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n65"
+    },
+    {
+      "type": "web_click",
+      "label": "点容器外空白关闭下拉（多选不会自动关）",
+      "args": {
+        "target": "text=商品属性",
+        "limit_ms": 6000,
+        "jitter": [
+          300,
+          600
+        ],
+        "on_fail": {
+          "mode": "skip"
+        }
+      },
+      "id": "n66"
+    },
+    {
+      "type": "web_js",
+      "label": "属性·面料：点开选第一个",
+      "args": {
+        "code": "async () => {\n  const NAME = '面料';\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const lab = [...document.querySelectorAll('.sell-component-info-wrapper-label')]\n    .find(e => (e.innerText || '').trim() === NAME);\n  if (!lab) return NAME + ':no-label';\n  let p = lab, inp = null, h = 0;\n  while (p && h < 5) {\n    inp = p.querySelector(\"input[placeholder='请选择']\");\n    if (inp) break;\n    p = p.parentElement; h++;\n  }\n  if (!inp) return NAME + ':no-input';\n  const wrap = inp.parentElement;\n  const cur = wrap && wrap.querySelector('.next-select-values');\n  if (cur && (cur.innerText || '').indexOf('请选择') < 0) return NAME + ':already';\n  inp.click();\n  await sleep(450);\n  const ov = document.querySelector('.next-overlay-wrapper.opened');\n  const first = ov ? ov.querySelector('div.options-item') : null;\n  if (!first) return NAME + ':no-option';\n  const picked = (first.innerText || '').replace(/\\s+/g, '').trim().slice(0, 10);\n  first.click();\n  await sleep(280);\n  return NAME + '=' + picked;\n}",
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n67"
+    },
+    {
+      "type": "web_click",
+      "label": "点容器外空白关闭下拉（多选不会自动关）",
+      "args": {
+        "target": "text=商品属性",
+        "limit_ms": 6000,
+        "jitter": [
+          300,
+          600
+        ],
+        "on_fail": {
+          "mode": "skip"
+        }
+      },
+      "id": "n68"
+    },
+    {
+      "type": "web_js",
+      "label": "属性·上市年份季节：点开选第一个",
+      "args": {
+        "code": "async () => {\n  const NAME = '上市年份季节';\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const lab = [...document.querySelectorAll('.sell-component-info-wrapper-label')]\n    .find(e => (e.innerText || '').trim() === NAME);\n  if (!lab) return NAME + ':no-label';\n  let p = lab, inp = null, h = 0;\n  while (p && h < 5) {\n    inp = p.querySelector(\"input[placeholder='请选择']\");\n    if (inp) break;\n    p = p.parentElement; h++;\n  }\n  if (!inp) return NAME + ':no-input';\n  const wrap = inp.parentElement;\n  const cur = wrap && wrap.querySelector('.next-select-values');\n  if (cur && (cur.innerText || '').indexOf('请选择') < 0) return NAME + ':already';\n  inp.click();\n  await sleep(450);\n  const ov = document.querySelector('.next-overlay-wrapper.opened');\n  const first = ov ? ov.querySelector('div.options-item') : null;\n  if (!first) return NAME + ':no-option';\n  const picked = (first.innerText || '').replace(/\\s+/g, '').trim().slice(0, 10);\n  first.click();\n  await sleep(280);\n  return NAME + '=' + picked;\n}",
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n69"
+    },
+    {
+      "type": "web_click",
+      "label": "点容器外空白关闭下拉（多选不会自动关）",
+      "args": {
+        "target": "text=商品属性",
+        "limit_ms": 6000,
+        "jitter": [
+          300,
+          600
+        ],
+        "on_fail": {
+          "mode": "skip"
+        }
+      },
+      "id": "n70"
+    },
+    {
+      "type": "web_js",
+      "label": "属性·袖长类型：点开选第一个",
+      "args": {
+        "code": "async () => {\n  const NAME = '袖长类型';\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const lab = [...document.querySelectorAll('.sell-component-info-wrapper-label')]\n    .find(e => (e.innerText || '').trim() === NAME);\n  if (!lab) return NAME + ':no-label';\n  let p = lab, inp = null, h = 0;\n  while (p && h < 5) {\n    inp = p.querySelector(\"input[placeholder='请选择']\");\n    if (inp) break;\n    p = p.parentElement; h++;\n  }\n  if (!inp) return NAME + ':no-input';\n  const wrap = inp.parentElement;\n  const cur = wrap && wrap.querySelector('.next-select-values');\n  if (cur && (cur.innerText || '').indexOf('请选择') < 0) return NAME + ':already';\n  inp.click();\n  await sleep(450);\n  const ov = document.querySelector('.next-overlay-wrapper.opened');\n  const first = ov ? ov.querySelector('div.options-item') : null;\n  if (!first) return NAME + ':no-option';\n  const picked = (first.innerText || '').replace(/\\s+/g, '').trim().slice(0, 10);\n  first.click();\n  await sleep(280);\n  return NAME + '=' + picked;\n}",
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n71"
+    },
+    {
+      "type": "web_click",
+      "label": "点容器外空白关闭下拉（多选不会自动关）",
+      "args": {
+        "target": "text=商品属性",
+        "limit_ms": 6000,
+        "jitter": [
+          300,
+          600
+        ],
+        "on_fail": {
+          "mode": "skip"
+        }
+      },
+      "id": "n72"
+    },
+    {
+      "type": "web_js",
+      "label": "属性·适用性别：点开选第一个",
+      "args": {
+        "code": "async () => {\n  const NAME = '适用性别';\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n  const lab = [...document.querySelectorAll('.sell-component-info-wrapper-label')]\n    .find(e => (e.innerText || '').trim() === NAME);\n  if (!lab) return NAME + ':no-label';\n  let p = lab, inp = null, h = 0;\n  while (p && h < 5) {\n    inp = p.querySelector(\"input[placeholder='请选择']\");\n    if (inp) break;\n    p = p.parentElement; h++;\n  }\n  if (!inp) return NAME + ':no-input';\n  const wrap = inp.parentElement;\n  const cur = wrap && wrap.querySelector('.next-select-values');\n  if (cur && (cur.innerText || '').indexOf('请选择') < 0) return NAME + ':already';\n  inp.click();\n  await sleep(450);\n  const ov = document.querySelector('.next-overlay-wrapper.opened');\n  const first = ov ? ov.querySelector('div.options-item') : null;\n  if (!first) return NAME + ':no-option';\n  const picked = (first.innerText || '').replace(/\\s+/g, '').trim().slice(0, 10);\n  first.click();\n  await sleep(280);\n  return NAME + '=' + picked;\n}",
+        "jitter": [
+          300,
+          600
+        ]
+      },
+      "id": "n73"
+    },
+    {
+      "type": "web_click",
+      "label": "点容器外空白关闭下拉（多选不会自动关）",
+      "args": {
+        "target": "text=商品属性",
+        "limit_ms": 6000,
+        "jitter": [
+          300,
+          600
+        ],
+        "on_fail": {
+          "mode": "skip"
+        }
+      },
+      "id": "n74"
+    },
+    {
+      "type": "web_type",
+      "label": "主色：直接输入白色",
+      "args": {
+        "target": "input[placeholder*='主色']",
+        "text": "{颜色}",
+        "kind": "type",
+        "delay_ms": 80,
+        "jitter": [
+          300,
+          700
+        ]
+      },
+      "id": "n75"
+    },
+    {
+      "id": "n76",
+      "type": "web_key",
+      "label": "关主色面板（真实键盘 Escape）",
+      "args": {
+        "key": "Escape",
+        "jitter": [
+          200,
+          400
+        ]
+      }
+    },
+    {
+      "type": "sleep",
+      "label": "留 1 秒给尺码面板渲染",
+      "args": {
+        "ms": [
+          1500,
+          1800
+        ]
+      },
+      "id": "n77"
+    },
+    {
+      "id": "n78",
       "type": "web_click",
       "position": {
         "x": 0.0,
@@ -438,13 +1091,14 @@
           300,
           700
         ],
-        "target": "@el:qn_size_input"
+        "target": "input[placeholder*='请选择尺码']"
       },
       "off": false,
-      "budget_ms": 0
+      "budget_ms": 0,
+      "label": "点尺码框（按 placeholder，站上验证）"
     },
     {
-      "id": "n25",
+      "id": "n79",
       "type": "web_wait",
       "position": {
         "x": 0.0,
@@ -462,7 +1116,7 @@
       "budget_ms": 0
     },
     {
-      "id": "n26",
+      "id": "n80",
       "type": "web_js",
       "position": {
         "x": 0.0,
@@ -479,7 +1133,7 @@
       "budget_ms": 0
     },
     {
-      "id": "n27",
+      "id": "n81",
       "type": "web_js",
       "position": {
         "x": 0.0,
@@ -496,7 +1150,23 @@
       "budget_ms": 0
     },
     {
-      "id": "n28",
+      "type": "web_click",
+      "label": "点容器外空白关闭下拉（多选不会自动关）",
+      "args": {
+        "target": "text=商品属性",
+        "limit_ms": 6000,
+        "jitter": [
+          300,
+          600
+        ],
+        "on_fail": {
+          "mode": "skip"
+        }
+      },
+      "id": "n82"
+    },
+    {
+      "id": "n83",
       "type": "web_type",
       "position": {
         "x": 0.0,
@@ -516,7 +1186,53 @@
       "budget_ms": 0
     },
     {
-      "id": "n29",
+      "type": "web_js",
+      "label": "给 SKU 行输入框打标记",
+      "args": {
+        "code": "() => {\n  const rows = [...document.querySelectorAll('tbody tr')]\n    .filter(r => (r.innerText || '').indexOf('/') >= 0);\n  const row = rows[rows.length - 1];\n  if (!row) return 'no-sku-row';\n  const ins = [...row.querySelectorAll('input')];\n  ins.forEach((e, i) => e.setAttribute('data-rpa-sku', String(i)));\n  return { cells: ins.length, values: ins.map(e => e.value || '') };\n}"
+      },
+      "id": "n84"
+    },
+    {
+      "type": "web_type",
+      "label": "SKU 价格（第 1 个框）",
+      "args": {
+        "target": "[data-rpa-sku=\"0\"]",
+        "text": "{SKU价格}",
+        "kind": "type",
+        "delay_ms": 60,
+        "jitter": [
+          300,
+          700
+        ]
+      },
+      "id": "n85"
+    },
+    {
+      "type": "web_type",
+      "label": "SKU 库存（第 2 个框）",
+      "args": {
+        "target": "[data-rpa-sku=\"1\"]",
+        "text": "{SKU库存}",
+        "kind": "type",
+        "delay_ms": 60,
+        "jitter": [
+          300,
+          700
+        ]
+      },
+      "id": "n86"
+    },
+    {
+      "type": "web_key",
+      "label": "Tab 失焦触发总库存汇总",
+      "args": {
+        "key": "Tab"
+      },
+      "id": "n87"
+    },
+    {
+      "id": "n88",
       "type": "web_click",
       "position": {
         "x": 0.0,
@@ -534,7 +1250,7 @@
       "budget_ms": 0
     },
     {
-      "id": "n30",
+      "id": "n89",
       "type": "sleep",
       "position": {
         "x": 0.0,
@@ -550,7 +1266,7 @@
       "budget_ms": 0
     },
     {
-      "id": "n31",
+      "id": "n90",
       "type": "web_open",
       "label": "查草稿箱做业务断言",
       "args": {
@@ -563,7 +1279,7 @@
       }
     },
     {
-      "id": "n32",
+      "id": "n91",
       "type": "web_wait",
       "args": {
         "text": "草稿",
@@ -575,7 +1291,7 @@
       }
     },
     {
-      "id": "n33",
+      "id": "n92",
       "type": "web_elem_info",
       "label": "draft_hits>0 即保存成功（回传 n8n）",
       "args": {
@@ -585,7 +1301,7 @@
       }
     },
     {
-      "id": "n34",
+      "id": "n93",
       "type": "sleep",
       "args": {
         "ms": [
@@ -760,6 +1476,301 @@
       "id": "e33",
       "from": "n33",
       "to": "n34"
+    },
+    {
+      "id": "e34",
+      "from": "n34",
+      "to": "n35"
+    },
+    {
+      "id": "e35",
+      "from": "n35",
+      "to": "n36"
+    },
+    {
+      "id": "e36",
+      "from": "n36",
+      "to": "n37"
+    },
+    {
+      "id": "e37",
+      "from": "n37",
+      "to": "n38"
+    },
+    {
+      "id": "e38",
+      "from": "n38",
+      "to": "n39"
+    },
+    {
+      "id": "e39",
+      "from": "n39",
+      "to": "n40"
+    },
+    {
+      "id": "e40",
+      "from": "n40",
+      "to": "n41"
+    },
+    {
+      "id": "e41",
+      "from": "n41",
+      "to": "n42"
+    },
+    {
+      "id": "e42",
+      "from": "n42",
+      "to": "n43"
+    },
+    {
+      "id": "e43",
+      "from": "n43",
+      "to": "n44"
+    },
+    {
+      "id": "e44",
+      "from": "n44",
+      "to": "n45"
+    },
+    {
+      "id": "e45",
+      "from": "n45",
+      "to": "n46"
+    },
+    {
+      "id": "e46",
+      "from": "n46",
+      "to": "n47"
+    },
+    {
+      "id": "e47",
+      "from": "n47",
+      "to": "n48"
+    },
+    {
+      "id": "e48",
+      "from": "n48",
+      "to": "n49"
+    },
+    {
+      "id": "e49",
+      "from": "n49",
+      "to": "n50"
+    },
+    {
+      "id": "e50",
+      "from": "n50",
+      "to": "n51"
+    },
+    {
+      "id": "e51",
+      "from": "n51",
+      "to": "n52"
+    },
+    {
+      "id": "e52",
+      "from": "n52",
+      "to": "n53"
+    },
+    {
+      "id": "e53",
+      "from": "n53",
+      "to": "n54"
+    },
+    {
+      "id": "e54",
+      "from": "n54",
+      "to": "n55"
+    },
+    {
+      "id": "e55",
+      "from": "n55",
+      "to": "n56"
+    },
+    {
+      "id": "e56",
+      "from": "n56",
+      "to": "n57"
+    },
+    {
+      "id": "e57",
+      "from": "n57",
+      "to": "n58"
+    },
+    {
+      "id": "e58",
+      "from": "n58",
+      "to": "n59"
+    },
+    {
+      "id": "e59",
+      "from": "n59",
+      "to": "n60"
+    },
+    {
+      "id": "e60",
+      "from": "n60",
+      "to": "n61"
+    },
+    {
+      "id": "e61",
+      "from": "n61",
+      "to": "n62"
+    },
+    {
+      "id": "e62",
+      "from": "n62",
+      "to": "n63"
+    },
+    {
+      "id": "e63",
+      "from": "n63",
+      "to": "n64"
+    },
+    {
+      "id": "e64",
+      "from": "n64",
+      "to": "n65"
+    },
+    {
+      "id": "e65",
+      "from": "n65",
+      "to": "n66"
+    },
+    {
+      "id": "e66",
+      "from": "n66",
+      "to": "n67"
+    },
+    {
+      "id": "e67",
+      "from": "n67",
+      "to": "n68"
+    },
+    {
+      "id": "e68",
+      "from": "n68",
+      "to": "n69"
+    },
+    {
+      "id": "e69",
+      "from": "n69",
+      "to": "n70"
+    },
+    {
+      "id": "e70",
+      "from": "n70",
+      "to": "n71"
+    },
+    {
+      "id": "e71",
+      "from": "n71",
+      "to": "n72"
+    },
+    {
+      "id": "e72",
+      "from": "n72",
+      "to": "n73"
+    },
+    {
+      "id": "e73",
+      "from": "n73",
+      "to": "n74"
+    },
+    {
+      "id": "e74",
+      "from": "n74",
+      "to": "n75"
+    },
+    {
+      "id": "e75",
+      "from": "n75",
+      "to": "n76"
+    },
+    {
+      "id": "e76",
+      "from": "n76",
+      "to": "n77"
+    },
+    {
+      "id": "e77",
+      "from": "n77",
+      "to": "n78"
+    },
+    {
+      "id": "e78",
+      "from": "n78",
+      "to": "n79"
+    },
+    {
+      "id": "e79",
+      "from": "n79",
+      "to": "n80"
+    },
+    {
+      "id": "e80",
+      "from": "n80",
+      "to": "n81"
+    },
+    {
+      "id": "e81",
+      "from": "n81",
+      "to": "n82"
+    },
+    {
+      "id": "e82",
+      "from": "n82",
+      "to": "n83"
+    },
+    {
+      "id": "e83",
+      "from": "n83",
+      "to": "n84"
+    },
+    {
+      "id": "e84",
+      "from": "n84",
+      "to": "n85"
+    },
+    {
+      "id": "e85",
+      "from": "n85",
+      "to": "n86"
+    },
+    {
+      "id": "e86",
+      "from": "n86",
+      "to": "n87"
+    },
+    {
+      "id": "e87",
+      "from": "n87",
+      "to": "n88"
+    },
+    {
+      "id": "e88",
+      "from": "n88",
+      "to": "n89"
+    },
+    {
+      "id": "e89",
+      "from": "n89",
+      "to": "n90"
+    },
+    {
+      "id": "e90",
+      "from": "n90",
+      "to": "n91"
+    },
+    {
+      "id": "e91",
+      "from": "n91",
+      "to": "n92"
+    },
+    {
+      "id": "e92",
+      "from": "n92",
+      "to": "n93"
     }
   ],
   "vars": [
@@ -786,7 +1797,38 @@
     {
       "name": "价格",
       "value": "99"
+    },
+    {
+      "name": "颜色",
+      "value": "白色"
+    },
+    {
+      "name": "SKU价格",
+      "value": "99"
+    },
+    {
+      "name": "SKU库存",
+      "value": "100"
+    },
+    {
+      "name": "主图1",
+      "value": "F:\\workspace\\projects\\rpa\\assets\\main\\main_01.png"
+    },
+    {
+      "name": "主图2",
+      "value": "F:\\workspace\\projects\\rpa\\assets\\main\\main_02.png"
+    },
+    {
+      "name": "主图3",
+      "value": "F:\\workspace\\projects\\rpa\\assets\\main\\main_03.png"
+    },
+    {
+      "name": "主图4",
+      "value": "F:\\workspace\\projects\\rpa\\assets\\main\\main_04.png"
+    },
+    {
+      "name": "主图5",
+      "value": "F:\\workspace\\projects\\rpa\\assets\\main\\main_05.png"
     }
-  ],
-  "elements": {}
+  ]
 }
