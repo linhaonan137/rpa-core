@@ -264,10 +264,32 @@ async def sys_py(args: dict[str, Any], ctx: ExecutionContext) -> Result:
 
 @register("sleep")
 async def sleep_node(args: dict[str, Any], ctx: ExecutionContext) -> Result:
-    """args: {ms}"""
-    import asyncio
+    """等待。args: {ms, jitter?}，ms 可以是数字或 `[min, max]` 区间。
 
-    ms = int(args.get("ms", 0) or 0)
+    为什么支持区间：固定时长会让整条流程节奏完全一致 —— 每次都在同一个
+    毫秒数上反应，这本身就是机器特征。用区间或者 jitter 让每次略有不同。
+
+      {"ms": [600, 1400]}            → 在这个区间里随机
+      {"ms": 800, "jitter": 300}     → 800 ± 300
+      {"ms": 800, "jitter": [0,400]} → 800 + 随机 0~400
+    """
+    import asyncio
+    import random
+
+    raw = args.get("ms", 0)
+    if isinstance(raw, (list, tuple)) and len(raw) == 2:
+        lo, hi = sorted(int(x) for x in raw)
+        ms = random.randint(max(0, lo), max(0, hi))
+    else:
+        ms = int(raw or 0)
+        jit = args.get("jitter", 0)
+        if isinstance(jit, (list, tuple)) and len(jit) == 2:
+            lo, hi = sorted(int(x) for x in jit)
+            ms = ms + random.randint(lo, hi)
+        elif jit:
+            ms = ms + random.randint(-int(jit), int(jit))
+        ms = max(0, ms)
+
     if ms > 0:
         await asyncio.sleep(ms / 1000)
     return Result.done(f"sleep {ms}ms")

@@ -285,6 +285,7 @@ python main.py run flows/real_1_quotes.json
 | [`docs/SELF-HEAL.md`](docs/SELF-HEAL.md) | 自愈五层、诊断表、变更记录、验证方式 |
 | [`docs/REAL-MOUSE.md`](docs/REAL-MOUSE.md) | 真实鼠标：实现与四个坑 |
 | [`docs/LESSONS.md`](docs/LESSONS.md) | 踩坑台账（按「再犯一次会疼多久」排序）|
+| [`docs/WAITING.md`](docs/WAITING.md) | **等待策略：等元素而不是 sleep，元素出现后加随机抖动** |
 
 > 文档纪律：**会变的数字只在下方「规模」一节维护**，其余文档一律指向代码（`list_node_types` / `api/mcp.py`），避免同一事实在多处腐烂。
 

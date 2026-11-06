@@ -1,5 +1,5 @@
 {
-  "name": "千牛发布商品-选类目（参数化）",
+  "name": "千牛发布商品-选类目（等元素+抖动）",
   "version": 1,
   "nodes": [
     {
@@ -18,15 +18,21 @@
     },
     {
       "id": "n2",
-      "type": "sleep",
+      "type": "web_wait",
       "position": {
         "x": 0.0,
         "y": 0.0
       },
       "args": {
-        "ms": 4000
+        "jitter": [
+          300,
+          900
+        ],
+        "kind": "visible",
+        "limit_ms": 20000,
+        "target": "a:has-text('商品')"
       },
-      "label": "等工作台渲染",
+      "label": "等工作台渲染（等商品菜单出现）",
       "off": false,
       "budget_ms": 0
     },
@@ -46,14 +52,21 @@
     },
     {
       "id": "n4",
-      "type": "sleep",
+      "type": "web_wait",
       "position": {
         "x": 0.0,
         "y": 0.0
       },
       "args": {
-        "ms": 1500
+        "jitter": [
+          400,
+          1100
+        ],
+        "kind": "visible",
+        "limit_ms": 15000,
+        "target": "a:has-text('发布商品')"
       },
+      "label": "等子菜单展开",
       "off": false,
       "budget_ms": 0
     },
@@ -79,9 +92,12 @@
         "y": 0.0
       },
       "args": {
-        "ms": 2500
+        "ms": [
+          1200,
+          2200
+        ]
       },
-      "label": "等新标签开出来",
+      "label": "等新标签开出来（这里没元素可等，用区间）",
       "off": false,
       "budget_ms": 0
     },
@@ -97,20 +113,26 @@
         "match": "contains",
         "title": "商品发布"
       },
-      "label": "按标题切到类目页（web_switch 工具的节点名是 web_tab）",
+      "label": "按标题切到类目页",
       "off": false,
       "budget_ms": 0
     },
     {
       "id": "n8",
-      "type": "sleep",
+      "type": "web_wait",
       "position": {
         "x": 0.0,
         "y": 0.0
       },
       "args": {
-        "ms": 2500
+        "jitter": [
+          400,
+          1000
+        ],
+        "limit_ms": 20000,
+        "text": "{一级类目}"
       },
+      "label": "等类目树渲染（等一级类目文字）",
       "off": false,
       "budget_ms": 0
     },
@@ -130,14 +152,20 @@
     },
     {
       "id": "n10",
-      "type": "sleep",
+      "type": "web_wait",
       "position": {
         "x": 0.0,
         "y": 0.0
       },
       "args": {
-        "ms": 1800
+        "jitter": [
+          300,
+          900
+        ],
+        "limit_ms": 15000,
+        "text": "{二级类目}"
       },
+      "label": "等二级类目列表",
       "off": false,
       "budget_ms": 0
     },
@@ -157,14 +185,20 @@
     },
     {
       "id": "n12",
-      "type": "sleep",
+      "type": "web_wait",
       "position": {
         "x": 0.0,
         "y": 0.0
       },
       "args": {
-        "ms": 1800
+        "jitter": [
+          300,
+          800
+        ],
+        "limit_ms": 15000,
+        "text": "正确填写品牌信息"
       },
+      "label": "等品牌区块加载",
       "off": false,
       "budget_ms": 0
     },
@@ -184,6 +218,26 @@
     },
     {
       "id": "n14",
+      "type": "web_wait",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "jitter": [
+          300,
+          700
+        ],
+        "kind": "visible",
+        "limit_ms": 10000,
+        "target": "div.options-item"
+      },
+      "label": "等品牌列表出现",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n15",
       "type": "web_js",
       "position": {
         "x": 0.0,
@@ -197,7 +251,7 @@
       "budget_ms": 0
     },
     {
-      "id": "n15",
+      "id": "n16",
       "type": "web_click",
       "position": {
         "x": 0.0,
@@ -281,6 +335,11 @@
       "id": "e14",
       "from": "n14",
       "to": "n15"
+    },
+    {
+      "id": "e15",
+      "from": "n15",
+      "to": "n16"
     }
   ],
   "vars": [

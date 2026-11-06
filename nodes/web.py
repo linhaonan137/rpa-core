@@ -1863,6 +1863,29 @@ async def web_matches(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     return Result.done(f"命中 {total} 个，返回 {len(out)} 条", data=out)
 
 
+async def _settle(args: dict[str, Any]) -> None:
+    """等到目标后再随机停一下，才允许下一步操作。
+
+    元素一出现就立刻点、反应时间 0ms —— 这是最典型的机器特征之一。
+    真实用户从"看到"到"动手"有几百毫秒的抖动，所以这里加一个随机区间：
+      {"jitter": [200, 800]}   → 随机停 200~800ms
+      {"jitter": 300}          → 停 300ms
+    """
+    raw = args.get("jitter")
+    if not raw:
+        return
+    import asyncio
+    import random
+
+    if isinstance(raw, (list, tuple)) and len(raw) == 2:
+        lo, hi = sorted(int(x) for x in raw)
+        ms = random.randint(max(0, lo), max(0, hi))
+    else:
+        ms = max(0, int(raw))
+    if ms:
+        await asyncio.sleep(ms / 1000)
+
+
 @register("web_wait")
 @_guard
 async def web_wait(args: dict[str, Any], ctx: ExecutionContext) -> Result:
@@ -1891,6 +1914,7 @@ async def web_wait(args: dict[str, Any], ctx: ExecutionContext) -> Result:
             await page.get_by_text(text, exact=False).first.wait_for(state="visible", timeout=limit)
         except Exception as exc:  # noqa: BLE001
             raise _LocateError(f"等待文本「{text}」超时（{limit}ms）: {type(exc).__name__}") from exc
+        await _settle(args)
         return Result.done(f"文本「{text}」已出现")
 
     # ② 等 URL 变化
@@ -1901,6 +1925,7 @@ async def web_wait(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         deadline = _aio.get_event_loop().time() + limit / 1000
         while _aio.get_event_loop().time() < deadline:
             if url in str(page.url):
+                await _settle(args)
                 return Result.done(f"URL 已包含 {url}")
             await _aio.sleep(0.2)
         return Result.fail(f"等待 URL 包含 {url} 超时（{limit}ms），当前: {str(page.url)[:100]}")
@@ -1913,6 +1938,7 @@ async def web_wait(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         await el.wait_for(state=state, timeout=limit)
     except Exception as exc:  # noqa: BLE001
         raise _LocateError(f"等待 {target} 变成 {kind} 超时（{limit}ms）: {type(exc).__name__}") from exc
+    await _settle(args)
     return Result.done(f"{target} 已 {kind}")
 
 
