@@ -660,7 +660,11 @@ def _stamp_name(prefix: str = "shot", suffix: str = "png") -> str:
 @register("web_open")
 @_guard
 async def web_open(args: dict[str, Any], ctx: ExecutionContext) -> Result:
-    """args: {url, wait_until=load, kind=current_tab|new_tab, limit_ms}"""
+    """args: {url, wait_until=load, kind=current_tab|new_tab, limit_ms, jitter?}
+
+    `jitter`：页面加载完再随机停一会儿 —— 新页面刚出来就立刻操作，
+    反应时间 0ms，自动化痕迹很明显。建议给 [500, 1500]。
+    """
     url = _need(ctx, args, "url", "web_open")
     kind = args.get("kind", "current_tab")
     limit = _ms(ctx, args, "limit_ms", DEFAULT_LIMIT_MS)
@@ -671,6 +675,7 @@ async def web_open(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         ctx, new_tab=(kind == "new_tab"), headless=_flag(args, "headless", _default_headless())
     )
     await page.goto(url, wait_until=wu, timeout=limit)
+    await _settle(args)  # 页面到位后随机停一下，别 0ms 就动手
     return Result.done(f"已打开 {url}", data={"url": url})
 
 
@@ -851,6 +856,7 @@ async def web_tab(args: dict[str, Any], ctx: ExecutionContext) -> Result:
 
     info = {"index": index, "url": str(getattr(chosen, "url", "") or ""), "title": await _title_of(chosen)}
     _save(ctx, args, info)
+    await _settle(args)  # 切完标签随机停一下，别立刻在新页面上动手
     return Result.done(f"已切到标签页 {index}", data=info)
 
 
@@ -925,7 +931,10 @@ async def web_reload(args: dict[str, Any], ctx: ExecutionContext) -> Result:
 @_guard
 async def web_click(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     """args: {target, hints, limit_ms, kind=left|right|middle|double, force, follow_new_tab,
-             mode=cdp|human|real, verify_text, hold_ms}
+             mode=cdp|human|real, verify_text, hold_ms, jitter?}
+
+    `jitter`：点完随机停一会儿再走到下一步。人手点完之后不会立刻进行下一个操作，
+    0ms 反应是最明显的机器特征。建议 [300, 900]，敏感操作 [800, 2000]。
 
     mode：
       cdp   —— 原生 locator.click()（默认，快）
@@ -987,6 +996,7 @@ async def web_click(args: dict[str, Any], ctx: ExecutionContext) -> Result:
             )
         except Exception as exc:  # noqa: BLE001
             return Result.fail(f"真实鼠标点击失败: {type(exc).__name__}: {exc}")
+        await _settle(args)
         return Result.done(f"真实鼠标点击 {target} @({x},{y})", data=info)
 
     before = len(_all_pages(ctx))
@@ -1023,8 +1033,10 @@ async def web_click(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         pages = _all_pages(ctx)
         if len(pages) > before:
             ctx.page = pages[-1]
+            await _settle(args)
             return Result.done(f"已点击并切到新标签页: {target}", data={"tab": len(pages) - 1})
 
+    await _settle(args)
     return Result.done(f"已点击 {target}")
 
 
@@ -1449,13 +1461,18 @@ async def web_exec(args: dict[str, Any], ctx: ExecutionContext) -> Result:
 @register("web_js", raw=("code",))
 @_guard
 async def web_js(args: dict[str, Any], ctx: ExecutionContext) -> Result:
-    """args: {code, save_as}"""
+    """args: {code, save_as, jitter?}
+
+    `jitter`：JS 里如果做了点击（绕过浮层的常用手段），跑完要随机停一下，
+    不然点完立刻走下一步，节奏太机械。
+    """
     page = _page(ctx)
     code = _script(ctx, args, "code")
     if not code:
         raise _NodeError("web_js 缺 code")
     result = await page.evaluate(code)
     _save(ctx, args, result)
+    await _settle(args)
     return Result.done("JS 已执行", data=result)
 
 

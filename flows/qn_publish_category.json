@@ -1,5 +1,5 @@
 {
-  "name": "千牛发布商品-选类目（等元素+抖动）",
+  "name": "千牛发布商品-选类目（等元素+每次切换都抖动）",
   "version": 1,
   "nodes": [
     {
@@ -10,9 +10,14 @@
         "y": 0.0
       },
       "args": {
+        "jitter": [
+          500,
+          1500
+        ],
         "until": "dom",
         "url": "https://myseller.taobao.com/home.htm/QnworkbenchHome/"
       },
+      "label": "打开工作台（到位后随机停）",
       "off": false,
       "budget_ms": 0
     },
@@ -25,14 +30,14 @@
       },
       "args": {
         "jitter": [
-          300,
-          900
+          200,
+          600
         ],
         "kind": "visible",
         "limit_ms": 20000,
         "target": "a:has-text('商品')"
       },
-      "label": "等工作台渲染（等商品菜单出现）",
+      "label": "等商品菜单出现",
       "off": false,
       "budget_ms": 0
     },
@@ -44,9 +49,13 @@
         "y": 0.0
       },
       "args": {
+        "jitter": [
+          300,
+          800
+        ],
         "target": "a:has-text('商品')"
       },
-      "label": "①点左侧商品",
+      "label": "①点左侧商品（点完停一下）",
       "off": false,
       "budget_ms": 0
     },
@@ -59,8 +68,8 @@
       },
       "args": {
         "jitter": [
-          400,
-          1100
+          300,
+          900
         ],
         "kind": "visible",
         "limit_ms": 15000,
@@ -80,7 +89,7 @@
       "args": {
         "code": "() => { const a = [...document.querySelectorAll('a')].find(e => (e.innerText||'').trim() === '发布商品'); if (!a) throw new Error('找不到发布商品链接'); a.click(); return a.href; }"
       },
-      "label": "②点发布商品（浮层遮挡）",
+      "label": "②点发布商品（浮层遮挡，JS 点）",
       "off": false,
       "budget_ms": 0
     },
@@ -97,7 +106,7 @@
           2200
         ]
       },
-      "label": "等新标签开出来（这里没元素可等，用区间）",
+      "label": "等新标签开出来",
       "off": false,
       "budget_ms": 0
     },
@@ -109,11 +118,15 @@
         "y": 0.0
       },
       "args": {
+        "jitter": [
+          400,
+          1000
+        ],
         "kind": "title",
         "match": "contains",
         "title": "商品发布"
       },
-      "label": "按标题切到类目页",
+      "label": "切到类目页（切完停）",
       "off": false,
       "budget_ms": 0
     },
@@ -132,7 +145,7 @@
         "limit_ms": 20000,
         "text": "{一级类目}"
       },
-      "label": "等类目树渲染（等一级类目文字）",
+      "label": "等类目树渲染",
       "off": false,
       "budget_ms": 0
     },
@@ -144,9 +157,13 @@
         "y": 0.0
       },
       "args": {
-        "code": "() => { const n = '{一级类目}'.trim(); const el = [...document.querySelectorAll('p,span,li')].find(e => (e.innerText||'').trim() === n && e.getBoundingClientRect().width > 0); if (!el) throw new Error('找不到一级类目: ' + n); el.click(); return n; }"
+        "code": "() => { const n = '{一级类目}'.trim(); const el = [...document.querySelectorAll('p,span,li')].find(e => (e.innerText||'').trim() === n && e.getBoundingClientRect().width > 0); if (!el) throw new Error('找不到一级类目: ' + n); el.click(); return n; }",
+        "jitter": [
+          300,
+          800
+        ]
       },
-      "label": "③选一级类目（精确匹配）",
+      "label": "③选一级类目",
       "off": false,
       "budget_ms": 0
     },
@@ -160,7 +177,7 @@
       "args": {
         "jitter": [
           300,
-          900
+          800
         ],
         "limit_ms": 15000,
         "text": "{二级类目}"
@@ -177,9 +194,13 @@
         "y": 0.0
       },
       "args": {
-        "code": "() => { const n = '{二级类目}'.trim(); const el = [...document.querySelectorAll('li,p,span')].find(e => (e.innerText||'').trim() === n && e.getBoundingClientRect().width > 0); if (!el) throw new Error('找不到二级类目: ' + n); el.click(); return n; }"
+        "code": "() => { const n = '{二级类目}'.trim(); const el = [...document.querySelectorAll('li,p,span')].find(e => (e.innerText||'').trim() === n && e.getBoundingClientRect().width > 0); if (!el) throw new Error('找不到二级类目: ' + n); el.click(); return n; }",
+        "jitter": [
+          300,
+          800
+        ]
       },
-      "label": "④选二级类目（精确匹配）",
+      "label": "④选二级类目",
       "off": false,
       "budget_ms": 0
     },
@@ -198,7 +219,7 @@
         "limit_ms": 15000,
         "text": "正确填写品牌信息"
       },
-      "label": "等品牌区块加载",
+      "label": "等品牌区块",
       "off": false,
       "budget_ms": 0
     },
@@ -210,6 +231,10 @@
         "y": 0.0
       },
       "args": {
+        "jitter": [
+          300,
+          700
+        ],
         "target": "input[placeholder='请选择']"
       },
       "label": "⑤展开品牌下拉",
@@ -232,7 +257,7 @@
         "limit_ms": 10000,
         "target": "div.options-item"
       },
-      "label": "等品牌列表出现",
+      "label": "等品牌列表",
       "off": false,
       "budget_ms": 0
     },
@@ -244,9 +269,13 @@
         "y": 0.0
       },
       "args": {
-        "code": "() => { const n = '{品牌}'.trim(); const els = [...document.querySelectorAll('div.options-item')].filter(e => (e.innerText||'').trim() === n); if (!els.length) throw new Error('品牌列表里没有: ' + n); els[0].click(); return n; }"
+        "code": "() => { const n = '{品牌}'.trim(); const els = [...document.querySelectorAll('div.options-item')].filter(e => (e.innerText||'').trim() === n); if (!els.length) throw new Error('品牌列表里没有: ' + n); els[0].click(); return n; }",
+        "jitter": [
+          300,
+          800
+        ]
       },
-      "label": "⑤选品牌（精确匹配）",
+      "label": "⑤选品牌",
       "off": false,
       "budget_ms": 0
     },
@@ -258,9 +287,13 @@
         "y": 0.0
       },
       "args": {
+        "jitter": [
+          600,
+          1500
+        ],
         "target": "button:has-text('确认，下一步')"
       },
-      "label": "⑥确认下一步",
+      "label": "⑥确认下一步（进填表页，停得久一点）",
       "off": false,
       "budget_ms": 0
     }
