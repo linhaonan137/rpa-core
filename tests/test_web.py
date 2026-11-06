@@ -275,6 +275,10 @@ async def test_switch_to_main_clears_frames():
 
 async def test_go_back_and_forward_and_refresh():
     page = FakePage()
+    # Playwright 语义：没有历史时 go_back 返回 None 且页面不变 → 新逻辑判失败。
+    # 这里模拟"有历史"（返回非 None）
+    page.go_back = AsyncMock(return_value=object())
+    page.go_forward = AsyncMock(return_value=object())
     ctx = make_ctx(page)
 
     assert (await web.web_back({}, ctx)).ok is True

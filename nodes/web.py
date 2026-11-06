@@ -957,7 +957,12 @@ async def web_back(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     """args: {wait_until=load, limit_ms}"""
     page = _page(ctx)
     limit = _ms(ctx, args, "limit_ms", DEFAULT_LIMIT_MS)
-    await page.go_back(wait_until=args.get("wait_until", "load"), timeout=limit)
+    before = str(page.url or "")
+    resp = await page.go_back(wait_until=args.get("wait_until", "load"), timeout=limit)
+    # 没有可后退的历史时 Playwright 返回 None、页面原封不动 —— 不能报成功，
+    # 否则流程以为回到了列表页，后续 wait/点击全落在旧页上（最难查的静默成功）
+    if resp is None and str(page.url or "") == before:
+        return Result.fail("没有可后退的历史，页面未变化")
     return Result.done("已后退")
 
 
@@ -967,7 +972,10 @@ async def web_forward(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     """args: {wait_until=load, limit_ms}"""
     page = _page(ctx)
     limit = _ms(ctx, args, "limit_ms", DEFAULT_LIMIT_MS)
-    await page.go_forward(wait_until=args.get("wait_until", "load"), timeout=limit)
+    before = str(page.url or "")
+    resp = await page.go_forward(wait_until=args.get("wait_until", "load"), timeout=limit)
+    if resp is None and str(page.url or "") == before:
+        return Result.fail("没有可前进的历史，页面未变化")
     return Result.done("已前进")
 
 
@@ -1300,7 +1308,19 @@ async def web_fill_many(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     data = {"filled": filled, "errors": errors, "total": len(pairs)}
     if errors and stop:
         return Result(ok=False, error=f"批量填写中断: {errors[0]}", message="批量填写中断", data=data)
-    return Result.done(f"已填 {filled}/{len(pairs)} 项", data=data)
+    if pairs and not filled:
+        # 一项都没填上必须失败：否则流程继续点「提交」→ 提交空表/半表，
+        # 而 data.filled=0 藏在返回里没人读，errors 全被吞掉
+        return Result(
+            ok=False,
+            error=f"批量填写全部失败（0/{len(pairs)}）: {errors[0] if errors else '未知原因'}",
+            message="批量填写全部失败",
+            data=data,
+        )
+    msg = f"已填 {filled}/{len(pairs)} 项"
+    if errors:
+        msg += f"（{len(errors)} 项失败，首条: {errors[0]}）"
+    return Result.done(msg, data=data)
 
 
 @register("web_pick_option")
@@ -2015,12 +2035,28 @@ async def _settle(args: dict[str, Any]) -> None:
         return
     import asyncio
     import random
+    import re
 
-    if isinstance(raw, (list, tuple)) and len(raw) == 2:
-        lo, hi = sorted(int(x) for x in raw)
+    def _pair(v: Any) -> tuple[int, int]:
+        if isinstance(v, (list, tuple)) and len(v) == 2:
+            return int(v[0]), int(v[1])
+        if isinstance(v, str):
+            nums = [int(x) for x in re.findall(r"\d+", v)]   # 支持 "[300,900]" / "300-900"
+            if len(nums) >= 2:
+                return nums[0], nums[1]
+            if nums:
+                return nums[0], nums[0]
+            raise ValueError(f"无法解析 jitter: {v!r}")
+        return int(v), int(v)
+
+    try:
+        lo, hi = sorted(_pair(raw))
         ms = random.randint(max(0, lo), max(0, hi))
-    else:
-        ms = max(0, int(raw))
+    except Exception:  # noqa: BLE001
+        # 关键：_settle 是在**动作已经执行完**之后调用的。
+        # 这里抛异常 = 点击真的发生了、节点却报失败 → 上层重试 → 重复点击/重复提交。
+        # 所以解析不了就不 sleep，绝不许抛。
+        return
     if ms:
         await asyncio.sleep(ms / 1000)
 

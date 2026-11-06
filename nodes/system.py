@@ -108,6 +108,13 @@ async def foreach(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         n = len(items)
     except TypeError:
         return Result.fail(f"foreach.items 不可遍历: {type(items).__name__}")
+    # 把 items 挂到 ctx：_run_loop 每轮按 _index 取当前项注入 {_item}/{_key}。
+    # 原来只返回轮数 —— body 拿不到元素，同一项会重复跑 N 次（重复提交），
+    # 而 item_as/index_as 两个参数根本没人读。
+    try:
+        ctx._loop_items = items
+    except Exception:  # noqa: BLE001
+        pass
     return Result.done(f"foreach {n} 项", data=n)
 
 
@@ -117,6 +124,10 @@ async def map_each(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     items = ctx.resolve(args.get("items"))
     if not isinstance(items, dict):
         return Result.fail("map_each.items 必须是字典")
+    try:
+        ctx._loop_items = items
+    except Exception:  # noqa: BLE001
+        pass
     return Result.done(f"map_each {len(items)} 项", data=len(items))
 
 

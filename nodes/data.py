@@ -976,7 +976,13 @@ async def data_csv_write(args: dict[str, Any], ctx: ExecutionContext) -> Result:
 
         target = resolve_path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text, encoding=str(args.get("encoding") or "utf-8-sig"))
+        # newline="" 必须显式传：默认 newline=None 在 Windows 上会把文本里的
+        # \r\n 再翻译一次 → 落盘成 \r\r\n，下游（pandas / Import-Csv）每条多出空行
+        target.write_text(
+            text,
+            encoding=str(args.get("encoding") or "utf-8-sig"),
+            newline="",
+        )
         return _ok(
             ctx,
             args,

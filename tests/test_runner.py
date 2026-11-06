@@ -150,6 +150,28 @@ async def test_loop_runs_body_n_times():
 
 
 @pytest.mark.asyncio
+async def test_foreach_injects_current_item():
+    """foreach 必须把当前项注入 {_item}。
+
+    原来只返回轮数，body 拿不到元素 —— 同一项重复跑 N 轮（重复提交），
+    而 item_as / index_as 两个参数从头到尾没人读。
+    """
+    f = flow(
+        [
+            node("F", "foreach", items=["a", "b"]),
+            node("b", "noop", value="{_item}"),   # 没注入就会 UndefinedVar
+            node("z", "noop"),
+        ],
+        [e("F", "b", "loop"), e("b", "F"), e("F", "z", "done")],
+    )
+    r = await run_flow(f)
+
+    assert r["ok"] is True, r["nodes"]
+    ids = [x["node_id"] for x in r["nodes"]]
+    assert ids.count("b") == 2, f"body 应跑 2 轮（每项一次），实际 {ids.count('b')}"
+
+
+@pytest.mark.asyncio
 async def test_continue_skips_rest_of_round():
     """continue 必须跳过本轮剩余步骤。
 

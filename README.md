@@ -301,6 +301,7 @@ python main.py run flows/real_1_quotes.json
 | [`docs/WAITING.md`](docs/WAITING.md) | **等待策略 + 写流程的工程技巧 + 业界功能性技巧（异常三层/可逆分类/漂移检测/环境锁定）** |
 | [`docs/TAOBAO-PUBLISH.md`](docs/TAOBAO-PUBLISH.md) | **淘宝上架流程实操知识：逐节点注意事项、MCP 覆盖、元素库体检** |
 | [`docs/RPA-N8N-PLAN.md`](docs/RPA-N8N-PLAN.md) | **接入 n8n 方案：定时上架架构、未用功能落地映射（P0/P1/P2）、验收标准** |
+| [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md) | **问题台账：45 条已知问题的「已修/延后/不改」+ 必须修的时机** |
 
 > 文档纪律：**会变的数字只在下方「规模」一节维护**，其余文档一律指向代码（`list_node_types` / `api/mcp.py`），避免同一事实在多处腐烂。
 

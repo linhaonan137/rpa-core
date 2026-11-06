@@ -375,6 +375,30 @@ class Runner:
             self.ctx.push_scope()
             self.ctx.push_loop({"kind": node.type, "index": i, "rounds": rounds})
             self.ctx._set_reserved("_index", i)
+            # 注入当前项：foreach/map_each 只把 items 挂在 ctx 上（轮数作返回值），
+            # 这里按 _index 取一项写进 {_item}/{_key}/{_value} 和 item_as/index_as。
+            # 不注入的话 body 拿不到元素，同一项会重复跑 N 轮。
+            _items = getattr(self.ctx, "_loop_items", None)
+            if _items is not None:
+                _k: Any = i
+                _v: Any = None
+                try:
+                    if isinstance(_items, dict):
+                        _k = list(_items.keys())[i]
+                        _v = _items[_k]
+                    else:
+                        _v = _items[i]
+                except (IndexError, KeyError):
+                    _v = None
+                self.ctx._set_reserved("_item", _v)
+                self.ctx._set_reserved("_key", _k)
+                self.ctx._set_reserved("_value", _v)
+                _item_as = str(node.args.get("item_as") or "").strip()
+                if _item_as:
+                    self.ctx._set_reserved(_item_as, _v)
+                _index_as = str(node.args.get("index_as") or "").strip()
+                if _index_as:
+                    self.ctx._set_reserved(_index_as, _k)
             try:
                 sub = Runner(
                     self.flow,
@@ -401,6 +425,12 @@ class Runner:
             if self.ctx.should_break:
                 self.ctx.should_break = False
                 break
+
+        # 循环结束清掉挂载的 items，避免影响后续普通 loop
+        try:
+            self.ctx._loop_items = None
+        except Exception:  # noqa: BLE001
+            pass
 
         # 循环结束走 done 出口（body 的回边不会被主图看到）
         return Result(ok=True, next="done", data=rounds, ms=round(total_ms, 1))

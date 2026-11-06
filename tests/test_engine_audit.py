@@ -108,3 +108,18 @@ def test_off_true_rejected_on_branch_nodes():
 
     # 普通节点仍然允许 off（调试时临时关掉某一步的合法用法）
     assert Node(id="n2", type="noop", off=True).off is True
+
+
+# ---------------------------------------------------------------- B3 _settle 容错
+
+
+async def test_settle_never_raises_on_bad_jitter():
+    """_settle 在动作执行**之后**调用：它抛异常 = 点击已发生却报失败 → 重试重复点击。"""
+    from nodes.web import _settle
+
+    await _settle({"jitter": "abc"})          # 无法解析 → 不 sleep，但不能抛
+    await _settle({"jitter": "1-2"})          # 字符串区间
+    await _settle({"jitter": "[1, 2]"})       # 字符串形式的列表
+    await _settle({"jitter": [1, 2]})         # 正常列表
+    await _settle({"jitter": 1})              # 单值
+    await _settle({})                         # 没配
