@@ -1,0 +1,86 @@
+{
+  "name": "拼多多发新商品：主图 + 标题（引擎跨站点验证）",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "web_open",
+      "label": "打开发品页",
+      "args": {
+        "url": "https://mms.pinduoduo.com/goods/category",
+        "until": "dom",
+        "jitter": [600, 1200]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "web_wait",
+      "label": "等标题框（@el:）",
+      "args": {
+        "target": "@el:pdd_title_input",
+        "kind": "visible",
+        "limit_ms": 20000,
+        "jitter": [300, 700]
+      },
+      "on_fail": {
+        "mode": "retry",
+        "attempts": 2,
+        "backoff_ms": 1200
+      }
+    },
+    {
+      "id": "n3",
+      "type": "web_upload",
+      "label": "直接给 file input 传主图（无 iframe）",
+      "args": {
+        "target": "@el:pdd_main_img_input",
+        "path": "{主图}",
+        "jitter": [400, 900]
+      }
+    },
+    {
+      "id": "n4",
+      "type": "web_type",
+      "label": "商品标题（@el:，真实键盘）",
+      "args": {
+        "target": "@el:pdd_title_input",
+        "text": "{标题}",
+        "kind": "type",
+        "delay_ms": 70,
+        "jitter": [300, 700]
+      }
+    },
+    {
+      "id": "n5",
+      "type": "web_wait",
+      "label": "等主图上传完成",
+      "args": {
+        "text": "1/10",
+        "limit_ms": 15000,
+        "jitter": [400, 800],
+        "on_fail": {
+          "mode": "skip"
+        }
+      }
+    },
+    {
+      "id": "n6",
+      "type": "web_js",
+      "label": "末尾业务断言：标题 + 主图",
+      "args": {
+        "code": "() => { const inp = document.querySelector(\"input[placeholder*='商品标题组成']\"); const title = inp ? inp.value : ''; const t = document.body.innerText; const m = t.match(/\\((\\d+)\\/10\\)/); const imgs = m ? parseInt(m[1]) : 0; if (!title || imgs < 1) { throw new Error('业务断言失败: 标题=' + title + ' 主图=' + imgs); } return '标题=' + title + ' 主图=' + imgs; }"
+      }
+    }
+  ],
+  "edges": [
+    {"id": "e1", "from": "n1", "to": "n2"},
+    {"id": "e2", "from": "n2", "to": "n3"},
+    {"id": "e3", "from": "n3", "to": "n4"},
+    {"id": "e4", "from": "n4", "to": "n5"},
+    {"id": "e5", "from": "n5", "to": "n6"}
+  ],
+  "vars": [
+    {"name": "主图", "value": "F:\\workspace\\projects\\rpa\\assets\\main\\main_01.png"},
+    {"name": "标题", "value": "测试商品请勿拍下自动化验证用"}
+  ]
+}
