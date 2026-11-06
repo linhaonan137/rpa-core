@@ -99,6 +99,9 @@ rpa.exe run flows\demo.json
 | 进了 iframe 要跑任意 JS | `web_switch(kind=iframe)` 之后 `web_read(kind=eval)` 会在 **iframe 内** 执行（内部走 `content_frame().evaluate`）。`web_scan` 仍只扫主文档 |
 | 关 Fusion 浮层、全选、逐字输入 | 用 `web_key`（`Escape` / `Control+A` / `kind=type`）。**合成 `KeyboardEvent` 关不掉弹层**，必须 CDP 原生按键 |
 | `flow_run` 回放 | 优先复用 `web_open(kind=attach)` 接管的浏览器。MCP 服务没设 `RPA_CDP` 也不会再 launch 一个无登录态的新浏览器（否则千牛直接跳登录页）|
+| **判断 Fusion 下拉是否选中** | 读 `.next-select-values` 的文本，**不要读 `input.value`**（那个 input 是搜索框，选中后仍为空）。弹层里的选项元素是 `div.options-item`，点它才回填；`li/[class*=option]` 会数到容器，虚高 |
+
+⚠️ 「弹层能打开」≠「下拉已选上」。验证下拉必须走完 `点开 → 点 div.options-item → 读 .next-select-values`，只读弹层存在会误判成通过。
 
 ### 顶层契约
 
