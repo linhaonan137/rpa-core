@@ -279,6 +279,22 @@ def create_app(
         _check(request)
         return {"ok": True, "trend": db.trend(flow=flow)}
 
+    @app.on_event("shutdown")
+    async def _close_shared_browser() -> None:
+        """优雅关闭共享浏览器。
+
+        为什么必须有：persistent context 的 cookie 只在 close() 时落盘。
+        直接强杀进程 → 内存里的登录态全丢，下次启动还得重新登录。
+        """
+        from api.mcp import _SHARED_BROWSER
+
+        context = _SHARED_BROWSER.get("context")
+        if context is not None:
+            try:
+                await context.close()
+            except Exception:  # noqa: BLE001 - 关闭失败不影响退出
+                pass
+
     return app
 
 
