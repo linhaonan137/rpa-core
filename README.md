@@ -298,8 +298,9 @@ python main.py run flows/real_1_quotes.json
 | [`docs/SELF-HEAL.md`](docs/SELF-HEAL.md) | 自愈五层、诊断表、变更记录、验证方式 |
 | [`docs/REAL-MOUSE.md`](docs/REAL-MOUSE.md) | 真实鼠标：实现与四个坑 |
 | [`docs/LESSONS.md`](docs/LESSONS.md) | 踩坑台账（按「再犯一次会疼多久」排序）|
-| [`docs/WAITING.md`](docs/WAITING.md) | **等待策略：等元素而不是 sleep，元素出现后加随机抖动** |
+| [`docs/WAITING.md`](docs/WAITING.md) | **等待策略 + 写流程的工程技巧 + 业界功能性技巧（异常三层/可逆分类/漂移检测/环境锁定）** |
 | [`docs/TAOBAO-PUBLISH.md`](docs/TAOBAO-PUBLISH.md) | **淘宝上架流程实操知识：逐节点注意事项、MCP 覆盖、元素库体检** |
+| [`docs/RPA-N8N-PLAN.md`](docs/RPA-N8N-PLAN.md) | **接入 n8n 方案：定时上架架构、未用功能落地映射（P0/P1/P2）、验收标准** |
 
 > 文档纪律：**会变的数字只在下方「规模」一节维护**，其余文档一律指向代码（`list_node_types` / `api/mcp.py`），避免同一事实在多处腐烂。
 
