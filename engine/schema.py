@@ -18,8 +18,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # ---------------------------------------------------------------- 枚举
 
-# 出口：普通边为 None；分支/循环/错误各有自己的名字
-Exit = Literal["true", "false", "loop", "done", "error"] | None
+# 出口：普通边为 None；分支/循环各有自己的名字。
+# ⚠️ 故意**没有 "error"**：引擎没实现错误出口（`Result.fail` 从不带 next，
+#    runner 也从不按 "error" 路由）。以前这里写着 error，是个永远走不到的假契约 ——
+#    用户配了"失败→补偿分支"，分支永远不执行，配了 on_fail=skip 时还报绿。
+#    失败分支请用 on_fail（retry/back/skip）+ if 节点。
+Exit = Literal["true", "false", "loop", "done"] | None
 
 # 失败策略：retry 原地重试 / back 回退到某节点 / skip 跳过 / stop 中断
 OnFailMode = Literal["retry", "back", "skip", "stop"]

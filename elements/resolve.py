@@ -399,17 +399,25 @@ async def resolve_fingerprint(
         except Exception as exc:  # noqa: BLE001
             diag["tried"].append({"layer": "geometry", "error": f"{type(exc).__name__}"})
 
-    # 全部失败：页面可能还在渲染，等一会儿重试一次再判死刑
-    # （实测：web_open until=dom 返回后页面内容还没画完，六层全找不到）
-    if _attempt < 1:
-        import asyncio
+    # 全部失败：页面可能还在渲染。**按 limit_ms 真正等**。
+    # 原来只是硬编码 sleep(1.0) 后递归重试一次 —— 于是
+    # `web_wait(target="@el:xxx", limit_ms=20000)` 实际只有 ~1s 窗口。
+    # 本机热缓存看不出来，冷启动/首屏慢 2~5s 时必然假失败，
+    # 而流程里 n2/n4 这类 @el: 等待**没有配 on_fail**，失败即整单中断。
+    import asyncio
+    import time as _time
 
-        await asyncio.sleep(1.0)
-        return await resolve_fingerprint(
-            page, entry, key=key, limit_ms=limit_ms, allow_multi=allow_multi, _attempt=_attempt + 1
-        )
+    if _attempt == 0:
+        deadline = _time.monotonic() + max(0.0, float(limit_ms) / 1000.0)
+        while _time.monotonic() < deadline:
+            await asyncio.sleep(min(0.4, max(0.05, deadline - _time.monotonic())))
+            loc2, diag2 = await resolve_fingerprint(
+                page, entry, key=key, limit_ms=0, allow_multi=allow_multi, _attempt=1
+            )
+            if loc2 is not None:
+                return loc2, diag2
 
-    # 重试也失败：把诊断带出去，方便判断是"页面变了"还是"指纹质量差"
+    # 等待窗口用尽：把诊断带出去，方便判断是"页面变了"还是"指纹质量差"
     diag["layer"] = None
     return None, diag
 

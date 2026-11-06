@@ -1408,6 +1408,13 @@ async def web_elem_info(args: dict[str, Any], ctx: ExecutionContext) -> Result:
 
     loc = await _locate(page, target, args.get("hints"), ctx, limit)
     if attr == "count":
+        # count 是**唯一不经过 _pick 的分支**：locator.count() 不做 auto-wait，
+        # 0 命中也会 Result.done。而它正是流程的业务闸门（draft_hits 判草稿是否进库），
+        # 列表数据是 XHR 后到的 —— 骨架先出、命中 0 → 判"没存上"→ 重投 → 重复草稿。
+        try:
+            await loc.first.wait_for(state="attached", timeout=min(limit, 5000))
+        except Exception:  # noqa: BLE001 - 等不到就按实际计数返回
+            pass
         count = await loc.count()
         _save(ctx, args, count)
         return Result.done(f"{target} 命中 {count} 个", data=count)

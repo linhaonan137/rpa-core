@@ -29,6 +29,7 @@
 | 审计一批（4）| K1 异常逃逸不再静默成功、K7 装载期校验节点类型、E4 元素库合并写、D1 DB busy_timeout + 落库失败不改业务结果 |
 | 审计二批（7）| E1 强锚点优先、E2 删 tie 静默分支、K3 continue 生效、K2 off 禁止分支、K5 then=skip、K8 expect 三条假绿、E5 frame 链 + P1 打包释放元素库 |
 | 深度筛查（5）| B3 `_settle` 解析失败不再抛（曾导致"点击已发生却报失败 → 重试重复点击"）、B2 `go_back/forward` 无历史不再报成功、B4 `web_fill_many` 全失败不再报成功、A2 CSV 落盘双 CR、C1 foreach 注入当前项（`{_item}`/`item_as`）|
+| **第三轮（9）**<br>端到端调用链 + 测试盲区视角 | **A1** `limit_ms` 在元素库定位里是死参数（`@el:` 只有 ~1s 窗口，冷启动必假失败）→ 改成按 `limit_ms` 轮询<br>**A2** body 非空但解析失败会静默用流程默认值跑完并报 ok（n8n 参数没进来就发测试商品）→ 现在 400<br>**A3** `_attach_shared` 在 `try` 外，浏览器不可达 → 裸 500 且无审计记录 → 现在 503 + 落库<br>**A4** `pages_before` 在锁外快照 → 会关掉等锁期间别人新开的页 → 快照移进锁内 + 只关 `_OWNED_PAGES`<br>**A5** `web_elem_info(attr=count)` 不等待、0 也成功（而它是 `draft_hits` 业务闸门）→ 加 `wait_for(attached)`<br>**B1** `_SubGraph.start` 兜底取 set 任意元素 → **嵌套循环随机跑 4 或 6 遍**（实测 6 次进程结果跳动）→ 取 loop 出口后继<br>**B2** `ctx._loop_items` 单值不是栈 → 内层循环 `{_item}` 取错行、外层残留 `None` → 进出栈恢复<br>**B3** `on_fail.then=skip` 在 `mode=retry` 下仍被忽略（K5 只修了 back 那一半）→ 统一判定<br>**B4** `exit="error"` 是永远走不到的假契约 → 从 `Exit` 移除并注明改用 `on_fail` |
 
 ## 3. 延后（⚠️ 到最后期限必须先修）
 

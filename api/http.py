@@ -133,15 +133,28 @@ def create_app(
         _check(request)
         flow = _load(name)
 
-        # body 的键直接当变量（这是"参数化执行"的唯一入口）
+        # body 的键直接当变量（这是"参数化执行"的唯一入口）。
+        # ⚠️ body 非空但解析失败时**不能**静默用 flow 默认值跑完 ——
+        # 那会变成"n8n 参数没进来 → 成功发了一个测试商品草稿 → 还报 ok=true"，
+        # 而业务断言（draft_hits）数的就是默认标题，一起假绿。
         init_vars: dict[str, Any] = {}
         try:
-            if request.headers.get("content-type", "").startswith("application/json"):
-                body = await request.json()
-                if isinstance(body, dict):
-                    init_vars = body
+            raw_body = await request.body()
         except Exception:  # noqa: BLE001
-            init_vars = {}
+            raw_body = b""
+        if raw_body.strip():
+            ctype = request.headers.get("content-type", "")
+            if "json" not in ctype.lower():
+                raise HTTPException(
+                    400, f"body 非空但 content-type={ctype!r} 不是 JSON，拒绝用默认值跑流程"
+                )
+            try:
+                body = json.loads(raw_body)
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(400, f"body 不是合法 JSON: {exc}") from exc
+            if not isinstance(body, dict):
+                raise HTTPException(400, "body 必须是 JSON 对象（键=流程变量名）")
+            init_vars = body
 
         run_id = f"r-{uuid.uuid4().hex[:8]}"
         ctx = ExecutionContext(run_id=run_id)
@@ -153,12 +166,26 @@ def create_app(
 
         from engine.browser_lock import BrowserBusy, browser_lock
 
-        context = await _attach_shared(ctx)
-        pages_before = list(getattr(context, "pages", None) or [])
+        try:
+            context = await _attach_shared(ctx)
+        except Exception as exc:  # noqa: BLE001
+            # 浏览器接不上（Ant 没开 / CDP 端口变了）→ 503 + **落一条失败记录**。
+            # 否则 /runs 里查不到这次失败，n8n 只看到裸 500，
+            # 无法区分"今天没跑"和"今天跑了 5 次全挂"。
+            try:
+                db.save_run(run_id, flow.name, False, [], error=f"浏览器不可用: {exc}")
+            except Exception:  # noqa: BLE001
+                pass
+            raise HTTPException(503, f"浏览器不可用: {exc}") from exc
+
+        pages_before: list[Any] = []
         try:
             # 跨进程独占：MCP 服务 / 另一个并发请求正在用这只浏览器时排队等。
             # 不加锁两边会抢同一个标签页（互相导航、互相关页 → 随机"元素找不到"）。
             async with browser_lock():
+                # 快照必须在**锁内**取：锁外取的话，等锁期间别的进程/会话新开的页
+                # 不在快照里，我们跑完会把它关掉（正是这把锁想解决的问题）。
+                pages_before = list(getattr(context, "pages", None) or [])
                 result = await Runner(flow, ctx, RunOptions()).execute()
         except ContextError as exc:
             raise HTTPException(400, f"上下文错误: {exc}") from exc
@@ -171,8 +198,12 @@ def create_app(
             # 关掉本次请求新开的标签页：复用浏览器但别让标签越积越多。
             # keep_pages=1 时不关 —— 交互探索要看到流程最后停在哪个页面。
             if not keep_pages:
+                from nodes.web import _OWNED_PAGES
+
                 for _p in list(getattr(context, "pages", None) or []):
-                    if _p not in pages_before:
+                    # 只关**本进程自己 new_page 出来的**页，且不在锁内快照里 ——
+                    # 与 web_close(all) 同口径，绝不碰用户 / 别的进程的标签
+                    if id(_p) in _OWNED_PAGES and _p not in pages_before:
                         try:
                             await _p.close()
                         except Exception:  # noqa: BLE001

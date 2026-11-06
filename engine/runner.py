@@ -288,7 +288,15 @@ class Runner:
                 else:
                     self.ctx.should_stop = True
             else:
-                self.ctx.should_stop = True
+                # then=skip 对 retry 同样生效（schema 注释就是"次数耗尽后的动作"）。
+                # 原来只在 back 分支里读 then，配 retry+then=skip 的批量任务仍是整单中断。
+                if node.on_fail is not None and node.on_fail.then == "skip":
+                    tolerated = True
+                    self.ctx.log(
+                        "warn", f"{node.display} 重试用尽，按 then=skip 继续", node=node.id
+                    )
+                else:
+                    self.ctx.should_stop = True
 
         self.logs.append(
             NodeLog(
@@ -353,6 +361,8 @@ class Runner:
 
         fn = registry.get(node.type)
         # 循环节点只负责算"跑几次 + 每轮的变量"，body 由 Runner 跑
+        # 保存外层循环的 items（嵌套循环：内层会覆盖 ctx._loop_items）
+        _prev_items = getattr(self.ctx, "_loop_items", None)
         plan = await fn(self.ctx.resolve(node.args), self.ctx)
         if not plan.ok:
             self.logs.append(NodeLog(node.id, node.type, False, plan.ms, plan.error))
@@ -404,7 +414,7 @@ class Runner:
                     self.flow,
                     self.ctx,
                     RunOptions(max_steps=remaining),  # 用剩余预算，不是完整预算
-                    graph=_SubGraph(self.g, body),
+                    graph=_SubGraph(self.g, body, node.id),
                 )
                 sub_result = await sub.execute()
                 total_ms += sub_result["ms"]
@@ -426,9 +436,9 @@ class Runner:
                 self.ctx.should_break = False
                 break
 
-        # 循环结束清掉挂载的 items，避免影响后续普通 loop
+        # 恢复外层的 items（嵌套循环嵌套场景）；原来是清成 None，外层第二轮直接 UndefinedVar
         try:
-            self.ctx._loop_items = None
+            self.ctx._loop_items = _prev_items
         except Exception:  # noqa: BLE001
             pass
 
@@ -540,7 +550,7 @@ class Runner:
 class _SubGraph:
     """把主图裁剪成只含 body 的子图，供循环/子流程复用 Runner 跑。"""
 
-    def __init__(self, base: Graph, keep: set[str]) -> None:
+    def __init__(self, base: Graph, keep: set[str], loop_id: str | None = None) -> None:
         self.flow = base.flow
         self.nodes = {k: v for k, v in base.nodes.items() if k in keep}
         self.edges = [e for e in base.edges if e.from_ in keep and e.to in keep]
@@ -548,6 +558,15 @@ class _SubGraph:
         self.pred = {k: [p for p in base.pred.get(k, []) if p in keep] for k in keep}
         self.isolated = []
         self.start = [k for k in keep if not self.pred.get(k)]
+        if not self.start and loop_id:
+            # 嵌套循环：体内首节点有回边前驱，子图里找不到"无前驱"的起点。
+            # 取循环节点 loop 出口指向的那个。原来 list(keep)[:1] 是 set 的任意元素，
+            # 起点随 PYTHONHASHSEED 变 —— 同一个流程有时跑 4 遍有时跑 6 遍，
+            # 而且全报 ok（实测 6 次独立进程：4 遍/6 遍交错）。
+            self.start = [
+                t for t, x in base.succ.get(loop_id, [])
+                if t in keep and x in (None, "loop")
+            ][:1]
         if not self.start:
             self.start = list(keep)[:1]
 

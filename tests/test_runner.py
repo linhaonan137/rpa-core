@@ -150,6 +150,36 @@ async def test_loop_runs_body_n_times():
 
 
 @pytest.mark.asyncio
+async def test_nested_loop_runs_exact_count():
+    """嵌套循环必须正好跑 外层×内层 轮。
+
+    原来 `_SubGraph.start` 在"体内首节点有回边前驱"时兜底成 `list(keep)[:1]`，
+    而 keep 是 set —— 起点随 PYTHONHASHSEED 变，同一个流程有时 4 遍有时 6 遍，
+    而且全报 ok（实测 6 次独立进程结果在 4/6 之间跳）。
+    """
+    f = flow(
+        [
+            node("F", "foreach", items=["A", "B"]),
+            node("I", "loop", kind="count", count=2),
+            node("P", "noop"),
+            node("Z", "noop"),
+        ],
+        [
+            e("F", "I", "loop"),
+            e("I", "P", "loop"),
+            e("P", "I"),
+            e("I", "F", "done"),
+            e("F", "Z", "done"),
+        ],
+    )
+    for i in range(5):        # 多跑几次，专治"随机通过"
+        r = await run_flow(f)
+        ids = [x["node_id"] for x in r["nodes"]]
+        assert r["ok"] is True, r["nodes"]
+        assert ids.count("P") == 4, f"第 {i + 1} 次：内层应 4 轮（2×2），实际 {ids.count('P')}"
+
+
+@pytest.mark.asyncio
 async def test_foreach_injects_current_item():
     """foreach 必须把当前项注入 {_item}。
 
