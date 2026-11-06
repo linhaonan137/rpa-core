@@ -77,9 +77,20 @@ rpa.exe run flows\demo.json
 ⚠️ **节点输出必须用 `save_as` 显式存成变量**，再用 `{变量名}` 引用。
 `{n2}`（拿节点 id 当变量名）**不是合法引用** —— 引擎不会自动把节点输出注册成同名变量，写了会报"变量未定义"。
 
-⚠️ **`type` 是节点名，不是 MCP 工具名**。`web_open` / `web_extract` / `data_sheet_write` 恰好同名是巧合；
-`web_read`（工具）对应的节点是 `web_elem_info`（`kind=text|value|html|attr` 都映射到它）。
-写流程前先 `list_node_types` / `inspect_node` 确认，别拿工具名直接填。
+⚠️ **`type` 是节点名，不是 MCP 工具名**。写流程前先 `list_node_types` / `inspect_node` 确认，别拿工具名直接填。
+已知不同名的（都是实测踩出来的）：
+
+| MCP 工具 | 节点名 |
+|---|---|
+| `web_read`（text/value/html/attr）| `web_elem_info` |
+| `web_read`（list）| `web_matches` |
+| `web_read`（eval）| `web_js` |
+| `web_read`（children / siblings）| `web_children` / `web_siblings` |
+| `web_switch` | **`web_tab`** |
+| `web_fill` | `web_type` |
+| `web_network` | `web_net` |
+
+`web_open` / `web_click` / `web_extract` / `web_wait` / `sleep` / `data_sheet_write` 是同名的。
 
 ### 顶层契约
 

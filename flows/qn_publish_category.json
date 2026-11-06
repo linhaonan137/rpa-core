@@ -1,0 +1,301 @@
+{
+  "name": "千牛发布商品-选类目（参数化）",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "web_open",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "until": "dom",
+        "url": "https://myseller.taobao.com/home.htm/QnworkbenchHome/"
+      },
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n2",
+      "type": "sleep",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "ms": 4000
+      },
+      "label": "等工作台渲染",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n3",
+      "type": "web_click",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "target": "a:has-text('商品')"
+      },
+      "label": "①点左侧商品",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n4",
+      "type": "sleep",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "ms": 1500
+      },
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n5",
+      "type": "web_js",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "code": "() => { const a = [...document.querySelectorAll('a')].find(e => (e.innerText||'').trim() === '发布商品'); if (!a) throw new Error('找不到发布商品链接'); a.click(); return a.href; }"
+      },
+      "label": "②点发布商品（浮层遮挡）",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n6",
+      "type": "sleep",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "ms": 2500
+      },
+      "label": "等新标签开出来",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n7",
+      "type": "web_tab",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "kind": "title",
+        "match": "contains",
+        "title": "商品发布"
+      },
+      "label": "按标题切到类目页（web_switch 工具的节点名是 web_tab）",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n8",
+      "type": "sleep",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "ms": 2500
+      },
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n9",
+      "type": "web_js",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "code": "() => { const n = '{一级类目}'.trim(); const el = [...document.querySelectorAll('p,span,li')].find(e => (e.innerText||'').trim() === n && e.getBoundingClientRect().width > 0); if (!el) throw new Error('找不到一级类目: ' + n); el.click(); return n; }"
+      },
+      "label": "③选一级类目（精确匹配）",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n10",
+      "type": "sleep",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "ms": 1800
+      },
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n11",
+      "type": "web_js",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "code": "() => { const n = '{二级类目}'.trim(); const el = [...document.querySelectorAll('li,p,span')].find(e => (e.innerText||'').trim() === n && e.getBoundingClientRect().width > 0); if (!el) throw new Error('找不到二级类目: ' + n); el.click(); return n; }"
+      },
+      "label": "④选二级类目（精确匹配）",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n12",
+      "type": "sleep",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "ms": 1800
+      },
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n13",
+      "type": "web_click",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "target": "input[placeholder='请选择']"
+      },
+      "label": "⑤展开品牌下拉",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n14",
+      "type": "web_js",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "code": "() => { const n = '{品牌}'.trim(); const els = [...document.querySelectorAll('div.options-item')].filter(e => (e.innerText||'').trim() === n); if (!els.length) throw new Error('品牌列表里没有: ' + n); els[0].click(); return n; }"
+      },
+      "label": "⑤选品牌（精确匹配）",
+      "off": false,
+      "budget_ms": 0
+    },
+    {
+      "id": "n15",
+      "type": "web_click",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "args": {
+        "target": "button:has-text('确认，下一步')"
+      },
+      "label": "⑥确认下一步",
+      "off": false,
+      "budget_ms": 0
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "id": "e2",
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "id": "e3",
+      "from": "n3",
+      "to": "n4"
+    },
+    {
+      "id": "e4",
+      "from": "n4",
+      "to": "n5"
+    },
+    {
+      "id": "e5",
+      "from": "n5",
+      "to": "n6"
+    },
+    {
+      "id": "e6",
+      "from": "n6",
+      "to": "n7"
+    },
+    {
+      "id": "e7",
+      "from": "n7",
+      "to": "n8"
+    },
+    {
+      "id": "e8",
+      "from": "n8",
+      "to": "n9"
+    },
+    {
+      "id": "e9",
+      "from": "n9",
+      "to": "n10"
+    },
+    {
+      "id": "e10",
+      "from": "n10",
+      "to": "n11"
+    },
+    {
+      "id": "e11",
+      "from": "n11",
+      "to": "n12"
+    },
+    {
+      "id": "e12",
+      "from": "n12",
+      "to": "n13"
+    },
+    {
+      "id": "e13",
+      "from": "n13",
+      "to": "n14"
+    },
+    {
+      "id": "e14",
+      "from": "n14",
+      "to": "n15"
+    }
+  ],
+  "vars": [
+    {
+      "name": "一级类目",
+      "value": "男装"
+    },
+    {
+      "name": "二级类目",
+      "value": "Polo衫"
+    },
+    {
+      "name": "品牌",
+      "value": "004"
+    }
+  ],
+  "elements": {}
+}
