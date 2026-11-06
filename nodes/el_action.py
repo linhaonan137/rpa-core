@@ -23,6 +23,49 @@ from typing import Any
 from engine.registry import Result, register
 
 DEFAULT_OPTION = "div.options-item"
+# 浮层：Fusion / ARIA 两种口径，够覆盖淘宝 + 常见组件库
+OVERLAY_SEL = ".next-overlay-wrapper.opened, [role=dialog], [role=listbox]"
+
+
+async def _count(page: Any, sel: str) -> int:
+    try:
+        return await page.locator(sel).count()
+    except Exception:  # noqa: BLE001 - 假页面 / 选择器不支持时按 0 处理
+        return 0
+
+
+def _record_observation(key: str, observed: dict[str, Any],
+                        close_method: str | None, auto_choose: bool) -> None:
+    """把本次实际观测写回元素库；两次一致自动从 default 升为 measured。"""
+    if not key:
+        return
+    try:
+        import os
+
+        from elements.store import ElementStore
+        from engine.paths import ELEMENTS_PATH
+
+        st = ElementStore(os.getenv("RPA_ELEMENTS") or str(ELEMENTS_PATH))
+        if not st.has(key):
+            return
+        e = st.get(key)
+        it = dict((e.hints or {}).get("interaction") or {})
+        it["observed"] = observed
+        if close_method:
+            it["close"] = close_method
+        if auto_choose and not it.get("choose"):
+            it["choose"] = "first-option"
+        it["observations"] = int(it.get("observations") or 0) + 1
+        if it["observations"] >= 2 and it.get("source") == "default":
+            it["source"] = "measured"
+            it["note"] = (str(it.get("note") or "") + " [自动观测 2 次一致，升级为实测]").strip()
+        e.hints["interaction"] = it
+        e.meta["interaction_source"] = it.get("source", "")
+        e.meta["updated_at"] = __import__("time").strftime("%Y-%m-%dT%H:%M:%S")
+        st.add(e, overwrite=True)
+        st.save()   # store 内部是合并写，不会覆盖别的进程新拾的元素
+    except Exception:  # noqa: BLE001 - 观测回写失败不该让业务动作失败
+        pass
 
 
 @register("web_el_action")
@@ -59,6 +102,15 @@ async def web_el_action(args: dict[str, Any], ctx: Any) -> Result:
     limit = int(args.get("limit_ms", 8000))
     done: list[str] = []
 
+    # 非实测配方 = 默认兜底策略：运行时自己观测浮层，按实际结果决定动作。
+    # 不要求人去确认那 12 条 —— 跑一次自动记一次，两次一致就升级为实测。
+    auto = bool(inter.get("auto", inter.get("source") != "measured"))
+    opt_sel = str(inter.get("option_selector") or DEFAULT_OPTION)
+    observed: dict[str, Any] = {}
+    ov0 = await _count(page, OVERLAY_SEL) if auto else 0
+    if auto:
+        observed["overlay_before"] = ov0
+
     # ① 打开
     loc = await _locate(page, target, None, ctx, limit)
     el = getattr(loc, "first", loc)
@@ -82,9 +134,16 @@ async def web_el_action(args: dict[str, Any], ctx: Any) -> Result:
         await page.keyboard.type(str(text), delay=int(inter.get("delay_ms") or 60))
         done.append("type")
 
-    # ③ 选项
+    # ③ 选项（auto 模式下：没写 choose 但检测到候选项，就自动选第一个）
     choose = inter.get("choose")
-    opt_sel = str(inter.get("option_selector") or DEFAULT_OPTION)
+    auto_choose = False
+    if auto:
+        ov1 = await _count(page, OVERLAY_SEL)
+        opts_n = await _count(page, opt_sel)
+        observed.update({"overlay_after_open": ov1, "options": opts_n})
+        if opts_n > 0 and not choose:
+            choose, auto_choose = "first-option", True
+            observed["auto_choose"] = True
     if choose:
         opts = page.locator(opt_sel)
         if isinstance(choose, dict) and choose.get("text"):
@@ -99,9 +158,34 @@ async def web_el_action(args: dict[str, Any], ctx: Any) -> Result:
         done.append(f"choose:{choose}")
         await asyncio.sleep(min(300, wait) / 1000)
 
-    # ④ 关闭
+    # ④ 关闭（auto 模式下：默认配方没写 close 却弹了浮层，就自动试三种关法）
     close = str(inter.get("close") or "none")
-    if close == "click-blank":
+    close_method: str | None = None
+    if auto and ov0 < observed.get("overlay_after_open", 0) and close == "none":
+        close = "auto"
+    if close == "auto":
+        for name in (["click-blank"] if inter.get("close_target") else []) + ["escape", "click-finish"]:
+            try:
+                if name == "click-blank":
+                    await page.locator(str(inter["close_target"])).first.click(timeout=2000)
+                elif name == "escape":
+                    await page.keyboard.press("Escape")
+                else:
+                    btn = page.get_by_text("完成", exact=True).first
+                    if await btn.count() == 0:
+                        continue
+                    await btn.click(timeout=2000)
+                await asyncio.sleep(0.15)
+                if await _count(page, OVERLAY_SEL) <= ov0:
+                    close_method = name
+                    done.append("auto-close:" + name)
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        if not close_method:
+            done.append("auto-close:failed")
+        observed["close_method"] = close_method or "failed"
+    elif close == "click-blank":
         ct = str(inter.get("close_target") or "")
         if not ct:
             return Result.fail("web_el_action: close=click-blank 需要 close_target")
@@ -116,10 +200,17 @@ async def web_el_action(args: dict[str, Any], ctx: Any) -> Result:
     elif close != "none":
         return Result.fail(f"web_el_action: 未知 close={close!r}")
 
+    if auto:
+        observed["overlay_after_close"] = await _count(page, OVERLAY_SEL)
+        _record_observation(key, observed, close_method, auto_choose)
+
     # ⑤ 收尾按键（例：总库存是 disabled 自动汇总，Tab 失焦才更新）
     after = str(inter.get("after") or "").strip()
     if after:
         await page.keyboard.press(after)
         done.append("after:" + after)
 
-    return Result.done(f"交互完成: {' → '.join(done)}", data={"steps": done, "key": key})
+    return Result.done(
+        f"交互完成: {' → '.join(done)}",
+        data={"steps": done, "key": key, "observed": observed or None},
+    )

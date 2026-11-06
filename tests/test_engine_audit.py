@@ -129,8 +129,8 @@ async def test_settle_never_raises_on_bad_jitter():
 
 
 class _FakeEl:
-    def __init__(self, log: list[str], name: str = "") -> None:
-        self.log, self.name = log, name
+    def __init__(self, log: list[str], name: str = "", n: int = 0) -> None:
+        self.log, self.name, self.n = log, name, n
 
     async def click(self, **_kw) -> None:
         self.log.append("click:" + self.name)
@@ -138,26 +138,33 @@ class _FakeEl:
     async def hover(self, **_kw) -> None:
         self.log.append("hover:" + self.name)
 
+    async def count(self) -> int:
+        return self.n
+
 
 class _FakeLoc:
-    def __init__(self, log: list[str], name: str) -> None:
-        self.log, self.name = log, name
-        self.first = _FakeEl(log, name)
+    def __init__(self, log: list[str], name: str, n: int = 1) -> None:
+        self.log, self.name, self.n = log, name, n
+        self.first = _FakeEl(log, name, n)
+
+    async def count(self) -> int:
+        return self.n
 
     def nth(self, i: int) -> _FakeEl:
-        return _FakeEl(self.log, f"{self.name}#{i}")
+        return _FakeEl(self.log, f"{self.name}#{i}", self.n)
 
 
 class _FakePage:
-    def __init__(self, log: list[str]) -> None:
+    def __init__(self, log: list[str], counts: dict[str, int] | None = None) -> None:
         self.log = log
+        self.counts = counts or {}
         self.keyboard = self
 
     def locator(self, sel: str) -> _FakeLoc:
-        return _FakeLoc(self.log, sel)
+        return _FakeLoc(self.log, sel, self.counts.get(sel, 0))
 
     def get_by_text(self, _t: str, **_kw) -> _FakeLoc:
-        return _FakeLoc(self.log, "text")
+        return _FakeLoc(self.log, "text", self.counts.get("text", 0))
 
     async def press(self, key: str) -> None:
         self.log.append("key:" + key)
@@ -258,3 +265,88 @@ async def test_el_action_rejects_readonly_and_iframe(monkeypatch):
     monkeypatch.setattr(web, "_library_entry", lambda k, c: _Entry({"requires": "iframe_in_out"}))
     r2 = await el_action.web_el_action({"key": "qn_main_img_slot"}, ctx)
     assert r2.ok is False and "iframe" in r2.error
+
+
+class _AutoPage:
+    """点击目标后弹出浮层；Escape 关掉。用来验证运行时自动观测。"""
+
+    def __init__(self, log: list[str]) -> None:
+        self.log = log
+        self.overlay = 0
+        self.keyboard = self
+
+    def locator(self, sel: str) -> _FakeLoc:
+        if "overlay" in sel or "dialog" in sel or "listbox" in sel:
+            return _FakeLoc(self.log, sel, self.overlay)
+        if sel == "div.options-item":
+            return _FakeLoc(self.log, sel, 3 if self.overlay else 0)
+        return _FakeLoc(self.log, sel, 1)
+
+    def get_by_text(self, _t: str, **_kw) -> _FakeLoc:
+        return _FakeLoc(self.log, "text", 0)
+
+    async def type(self, text: str, **_kw) -> None:
+        self.log.append("type:" + text)
+
+    async def press(self, key: str) -> None:
+        self.log.append("key:" + key)
+        if key == "Escape":
+            self.overlay = 0
+
+
+async def test_el_action_auto_observes_overlay(monkeypatch):
+    """默认兜底配方不用人确认：自己看到浮层 -> 自动选第一项 -> 自动试出关法。"""
+    import nodes.web as web
+    from nodes.el_action import web_el_action
+
+    log: list[str] = []
+    page = _AutoPage(log)
+
+    class _Trigger:
+        def __init__(self) -> None:
+            self.first = self
+
+        async def click(self, **_kw) -> None:
+            log.append("click:target")
+            page.overlay = 1
+
+    async def _fake_locate(_p, _t, _h, _c, _l):
+        return _Trigger()
+
+    monkeypatch.setattr(web, "_locate", _fake_locate)
+    ctx = ExecutionContext()
+    ctx.page = page
+    r = await web_el_action(
+        {"target": "css=x",
+         "interaction": {"open": "click", "close": "none", "wait_ms": 0,
+                         "source": "default", "auto": True}},
+        ctx,
+    )
+    assert r.ok is True
+    obs = r.data["observed"]
+    assert obs["overlay_after_open"] == 1 and obs["options"] == 3
+    assert obs["close_method"] == "escape" and obs["overlay_after_close"] == 0
+    assert any("choose:first-option" in s for s in r.data["steps"])
+    assert "auto-close:escape" in r.data["steps"]
+
+
+def test_observation_upgrades_default_to_measured(tmp_path, monkeypatch):
+    """两次一致观测 -> 自动升级，不需要人确认。"""
+    from elements.store import ElementEntry, ElementStore
+    from nodes.el_action import _record_observation
+
+    p = tmp_path / "e.json"
+    st = ElementStore(str(p))
+    st.add(ElementEntry(
+        key="x", role="button", name="x", css="#x",
+        hints={"interaction": {"source": "default", "auto": True, "observations": 0}},
+    ))
+    st.save()
+    monkeypatch.setenv("RPA_ELEMENTS", str(p))
+
+    _record_observation("x", {"overlay_after_open": 1}, "escape", True)
+    assert ElementStore(str(p)).get("x").hints["interaction"]["observations"] == 1
+    _record_observation("x", {"overlay_after_open": 1}, "escape", True)
+    it = ElementStore(str(p)).get("x").hints["interaction"]
+    assert it["observations"] == 2 and it["source"] == "measured"
+    assert it["close"] == "escape" and it["choose"] == "first-option"

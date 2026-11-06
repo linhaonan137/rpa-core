@@ -80,7 +80,19 @@
 
 **`web_el_action` 支持的字段**：`open(click/hover/none)`、`text`（真实键盘，React 受控）、`choose`、`option_selector`、`close`、`close_target`、`after`（如 `Tab` 触发自动汇总）、`wait_ms`。
 
-**2026-11-06 18:20 已给全部 15 条写入配方**（`source=measured` 3 / `inferred` 12，推定项待站上确认）：
+**2026-11-06 18:20 已给全部 15 条写入配方**：`measured` 3（今天站上实测）/ `default` 12（默认兜底，见下）。
+
+**⚠️ 那 12 条不需要人工确认**。`default` 不是"待验证的结论"，是**安全兜底策略**（`close=none` = 不做多余动作）。`web_el_action` 对 `default` 配方自动开启 `auto` 观测：
+
+| 运行时观测 | 自动动作 |
+|---|---|
+| 点后浮层数增加 | 即使配方写 `close=none`，也自动试 `点空白 → Escape → 完成`，直到浮层消失 |
+| 出现候选项 | 即使没写 `choose`，也自动选第一项 |
+| 无浮层 | 什么都不做（默认策略本身正确）|
+
+每次把 `observed{overlay_before, overlay_after_open, options, close_method, overlay_after_close}` 写回 `hints.interaction` 并累加 `observations`；**两次后自动把 `source` 升为 `measured`**，同时把试出来的 `close`/`choose` 固化下来。回写走 `ElementStore.save()` 合并写，不会覆盖别的进程新拾的元素。
+
+`source=measured` 的 3 条默认关闭 auto（已有实测结论，不再乱试）。
 
 | 类别 | 元素 | 配方 |
 |---|---|---|
