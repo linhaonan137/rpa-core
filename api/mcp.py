@@ -33,6 +33,29 @@ FLOW_DIR.mkdir(parents=True, exist_ok=True)
 #: 单实例上下文（浏览器跨调用复用）
 _ctx = ExecutionContext(run_id="mcp")
 
+# 进程级共享浏览器：flow_run / flow_run_async / HTTP 入口全部复用这一个。
+# 为什么不放 _ctx 上：flow_run 内部会新建 ExecutionContext（run_id 要唯一），
+# 新 ctx 没有 browser，`_ensure_page` 就会再 launch 一个 —— 每次跑流程多一个浏览器进程。
+_SHARED_BROWSER: dict[str, Any] = {}
+
+
+async def _attach_shared_browser(ctx: ExecutionContext) -> None:
+    """把进程级共享浏览器挂到给定 ctx 上；首次调用才真正启动。"""
+    if _SHARED_BROWSER.get("browser") is None:
+        from engine import stealth
+        from nodes.web import _default_headless, _launch
+
+        pw, browser = await _launch(headless=_default_headless())
+        contexts = list(getattr(browser, "contexts", None) or [])
+        context = contexts[0] if contexts else await browser.new_context()
+        try:
+            await stealth.apply(context, ctx)
+        except Exception:  # noqa: BLE001 - 注入失败不中断
+            pass
+        _SHARED_BROWSER.update(browser=browser, context=context, _pw=pw)
+    ctx.browser = _SHARED_BROWSER["browser"]
+    ctx.browser_context = _SHARED_BROWSER["context"]
+
 
 # ---------------------------------------------------------------- 内部工具
 
@@ -1576,6 +1599,8 @@ async def flow_run(
 
     run_id = f"r-{int(time.time())}-{_uuid.uuid4().hex[:6]}"
     ctx = EC(run_id=run_id)
+    # 复用进程级共享浏览器：不挂的话新 ctx 没 browser，web_open 会再 launch 一个
+    await _attach_shared_browser(ctx)
     for k, v in (vars or {}).items():
         ctx.set_var(k, v, scope="global")
     for var in f.vars:

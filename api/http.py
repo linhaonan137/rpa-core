@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -56,6 +57,24 @@ def create_app(
     from store.db import DB
 
     db = DB(db_file)
+
+    # ---------------------------------------------------------- 共享浏览器
+    #
+    # 为什么需要：`_ensure_page` 只看 `ctx.browser`，而 HTTP 每次请求都新建
+    # ExecutionContext → 每次请求都 launch 一个新浏览器（2~3 秒 + 登录态全丢）。
+    # 这里在服务层维护一个长驻浏览器，所有请求复用同一个 context
+    # （cookie / localStorage 都在这层，登录一次后续都带着）。
+
+    async def _attach_shared(ctx: ExecutionContext) -> Any:
+        """把共享浏览器挂到本次请求的 ctx 上，返回共享 context。
+
+        真正的实现在 api/mcp.py（`_attach_shared_browser`）—— 那边 flow_run
+        内部也要用同一份，不能在这里各起一套。
+        """
+        from api.mcp import _SHARED_BROWSER, _attach_shared_browser
+
+        await _attach_shared_browser(ctx)
+        return _SHARED_BROWSER["context"]
 
     # ---------------------------------------------------------- 鉴权
 
@@ -127,10 +146,20 @@ def create_app(
             if not ctx.has_var(var.name):  # body 传的优先
                 ctx.set_var(var.name, var.value, scope="global")
 
+        context = await _attach_shared(ctx)
+        pages_before = list(getattr(context, "pages", None) or [])
         try:
             result = await Runner(flow, ctx, RunOptions()).execute()
         except ContextError as exc:
             raise HTTPException(400, f"上下文错误: {exc}") from exc
+        finally:
+            # 关掉本次请求新开的标签页：复用浏览器但别让标签越积越多
+            for _p in list(getattr(context, "pages", None) or []):
+                if _p not in pages_before:
+                    try:
+                        await _p.close()
+                    except Exception:  # noqa: BLE001
+                        pass
 
         db.save_run(
             run_id,
@@ -171,6 +200,7 @@ def create_app(
             from api.mcp import _queue_runner
 
             task_queue.bind(_queue_runner)
+        # 不用在这里挂浏览器：_queue_runner -> flow_run 内部会挂进程级共享浏览器
         out = task_queue.submit(name, variables)
         return JSONResponse(out)
 

@@ -28,6 +28,10 @@ from engine.registry import Result, register
 
 DEFAULT_LIMIT_MS = 30_000
 
+# 共享浏览器（HTTP / n8n 场景）里同一个 context 最多留几个页。
+# 每个页面都带渲染进程，不设上限跑几百次就吃满内存。
+_MAX_PAGES_PER_CONTEXT = 3
+
 #: web_wait 的 kind → Playwright 的 state
 _STATES = {
     "visible": "visible",
@@ -491,6 +495,17 @@ async def _ensure_page(
             await stealth.apply(context, ctx)  # 接管指纹浏览器时自动跳过
         except Exception:  # noqa: BLE001 - 注入失败不中断
             pass
+
+    # 页面数上限：共享浏览器时（HTTP/n8n 长期跑）页面会一直堆，
+    # 每个页面都带渲染进程，几百次就吃满内存。超过上限就关最老的，
+    # 不做"本次请求开了哪些页"的记账 —— 那一套在异步队列里根本拿不到。
+    _pages = _safe_list(getattr(context, "pages", None) or [])
+    if len(_pages) >= _MAX_PAGES_PER_CONTEXT:
+        for _old in _pages[: len(_pages) - (_MAX_PAGES_PER_CONTEXT - 1)]:
+            try:
+                await _old.close()
+            except Exception:  # noqa: BLE001 - 关不掉就算了，不影响主流程
+                pass
 
     if page is not None:
         page = await context.new_page()
