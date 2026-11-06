@@ -229,16 +229,10 @@ async def resolve_fingerprint(
                         diag["layer"] = "role+name(overlap)"
                         diag["score"] = pool[0]["score"]
                         return loc.nth(pool[0]["index"]), diag
-                    # 位置有细微偏移但 tag 和文本都一样 → 还是重复 DOM（水合动画中间态）
-                    t0, t1 = pool[0], pool[1]
-                    if (
-                        t0.get("score") == t1.get("score")
-                        and t0.get("tag") == t1.get("tag")
-                        and (t0.get("text") or "")[:20] == (t1.get("text") or "")[:20]
-                    ):
-                        diag["layer"] = "role+name(tie)"
-                        diag["score"] = t0["score"]
-                        return loc.nth(t0["index"]), diag
+                    # 这里原来还有一条「同分同 tag 同文本就取第一个」的 tie 分支 —— 删了。
+                    # input 的 inner_text 恒为空，18 个 placeholder=请选择 的下拉
+                    # 分数/tag/文本完全相同，会静默命中第一个（品牌选到别的字段上）。
+                    # 「位置完全重合」（overlap）才是真·SSR 重复 DOM，那条已在上方放行。
                 best = scored[0]
                 if len(scored) == 1 or best["score"] - scored[1]["score"] >= 10:
                     diag["layer"] = "role+name(scored)"
@@ -249,6 +243,25 @@ async def resolve_fingerprint(
             raise
         except Exception as exc:  # noqa: BLE001
             diag["tried"].append({"layer": "role+name", "error": f"{type(exc).__name__}"})
+
+    # ---------------------------------------------- 层 1.05：强锚点优先
+    # id / data-testid 是唯一稳定锚点。label 层是按**几何猜**出来的：
+    # 采集时正上方的公告横幅会被当成 label（实测 qn_price_input 的 name 就是
+    # 「SKU参数填写面板已升级，」），而它有唯一的 #skuPrice 却排在 label 之后 ——
+    # 结果价格填进别的框。所以强锚点唯一命中时直接用它，别让 label 抢走。
+    for _an in ("data-testid", "id"):
+        _strong = str(attrs.get(_an) or "").strip()
+        if not _strong or _strong.startswith("__"):
+            continue
+        _sel = f'[{_an}="{_strong}"]' if _an == "data-testid" else f"#{_strong}"
+        try:
+            _loc = page.locator(_sel)
+            if await _count(_loc) == 1:
+                diag["tried"].append({"layer": f"anchor:{_an}", "count": 1, "sel": _sel})
+                diag["layer"] = f"anchor:{_an}"
+                return _loc, diag
+        except Exception as exc:  # noqa: BLE001
+            diag["tried"].append({"layer": f"anchor:{_an}", "error": f"{type(exc).__name__}"})
 
     # ---------------------------------------------- 层 1.2：表单 label 关联
     # 表单控件的 label 在正上方 ~24px（next-design Form.Item 的固定结构）。

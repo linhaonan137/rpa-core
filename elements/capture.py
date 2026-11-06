@@ -356,9 +356,22 @@ async def capture(
 
     if locator is not None:
         raw = await locator.evaluate(JS_CAPTURE, timeout=limit_ms)
+        chain = list(frame_chain or [])
+        if not chain:
+            # locator 分支原来不反查 frame：跨域 iframe 里的元素会被记成 frame=[]，
+            # 等于宣称"在主文档"—— 定位时在主文档跑完八层，撞到同名元素或直接失败
+            # （实测 qn_main_img_slot 的 path 第一段是 #struct-mainImagesGroup，
+            #  frame 却是 []）。这里用 Playwright 反查，走 CDP 不受同源限制。
+            try:
+                handle = await locator.element_handle()
+                owner = await handle.owner_frame() if handle is not None else None
+                if owner is not None and owner != page.main_frame:
+                    chain = await _frame_chain_of(page, owner)
+            except Exception:  # noqa: BLE001 - 反查失败就保持空链
+                chain = []
         entry = raw_to_entry(raw, key, source=source)
-        if frame_chain:
-            entry.fingerprint.frame = list(frame_chain)
+        if chain:
+            entry.fingerprint.frame = list(chain)
         if store is not None and save:
             store.add(entry, overwrite=True)
             store.save()

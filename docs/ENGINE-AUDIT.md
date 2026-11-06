@@ -63,14 +63,30 @@
 
 `pytest` 全量通过；新增 `tests/test_engine_audit.py` 6 个用例。
 
-## 6. 待办（按收益排序）
+## 5.2 第二轮已修（7 项，2026-11-06 14:00）
 
-| 优先 | 条目 | 理由 |
+| # | 修法 | 验证 |
 |---|---|---|
-| 0 | R1 + R2（真实鼠标：前台窗口断言 / 视口 clamp / 检查 `SendInput` 返回值）| **P0**，但当前流程走 `mode=cdp` 没触发，故未在本轮修。一旦启用 `mode=real`，点偏会打进别的窗口 |
-| 1 | E1 + E2（label 层降权到只做打分 + 删 tie 静默分支）| 直接影响 `@el:` 点错元素；元素库刚落地，现在修最划算 |
-| 2 | K3（continue 死代码）+ K2（off 用于分支节点）| 会导致"重复执行"和"静默漏执行" |
-| 3 | K8（expect 三条假绿）| 现在业务断言只有 3 处，假绿等于没有断言 |
-| 4 | Q1 + Q2（`_trim` 删活记录 / 队列无持久化无超时）| 接 n8n 后并发会踩到 |
-| 5 | E3（几何原点）、E5（frame 链丢失）、E7（两套打分器）| 定位精度，改版后才暴露 |
-| 6 | P1（frozen 不释放 `elements.json`）| 交付打包时必现 |
+| E1 | 新增**层 1.05 强锚点优先**：`id`/`data-testid` 唯一命中时直接用它，不让几何猜出来的 label 抢走（`qn_price_input` 的 name 是横幅文案，但有唯一 `#skuPrice`）| 连跑 3 次 @el: 全命中 |
+| E2 | **删掉 tie 静默分支**：18 个 `placeholder=请选择` 的下拉同分同 tag 同空文本，原来静默取第一个；现在只剩"位置完全重合"（SSR 重复 DOM）放行，其余报 `AmbiguousElement` | 同上 |
+| K3 | `continue` 真正生效：主循环条件加 `should_continue`，`_run_loop` 每轮检测并清零 | 单测：body 节点 0 次执行 |
+| K2 | schema 拒绝 `off=true` 用于 `if/loop/while/foreach`（会被跳过后切断所有下游出口却报成功）| 单测 |
+| K5 | `on_fail.then="skip"` 生效：回退重试用尽后按 skip 继续，不再无条件 stop | 代码路径 |
+| K8 | expect 三条假绿全修：无 page → 失败；`state=hidden` 真正实现；`@el:` 改用 `_locate` 支持 | 单测 |
+| E5 | `capture` 的 locator 分支补 frame 链反查（`element_handle().owner_frame()`），跨域 iframe 元素不再记成 `frame=[]` | 代码路径 |
+| P1 | `bootstrap_frozen` 同时释放 `elements.json`（已存在不覆盖），打包后 `@el:` 不再全废 | 代码路径 |
+
+回归验证：`pytest` 全量通过（含新增 3 个用例）；`qn_publish_draft` 连跑 3 次 **29.6 / 29.0 / 27.6s 全绿**，`draft_hits=8` 稳定。
+
+## 6. 剩余待办（明确不改或延后）
+
+| 优先 | 条目 | 为什么还不改 |
+|---|---|---|
+| 延后 | R1 + R2 真实鼠标（前台窗口断言 / 视口 clamp / 检查 SendInput 返回值）| P0，但当前流程走 `mode=cdp` 完全没触发；等真要启用 `mode=real` 前必修 |
+| 延后 | K4 `on_fail=back` 跨分支重跑 | 流程只用 `retry`，没用 back |
+| 延后 | K6 `start_at` 续跑不保存运行时状态 | 没在用断点续跑 |
+| 延后 | K9 `resolve` 误伤 `{变量}` | `web_js` 已有 `raw` 保护；`sys_py` 没在用 |
+| 延后 | Q1 + Q2 队列（`_trim` 删活记录 / 无持久化无超时）| 单进程串行跑不触发；接 n8n 并发前处理 |
+| 延后 | E3 几何原点 / E7 两套打分器 / E8 is_stale | 兜底层与统计口径，改版后才暴露 |
+| 不改 | K10 registry 重复注册静默覆盖 | 需要人为写重复注册才会踩 |
+| 不改 | M1 / M2 middleware 大半没接线 | 死代码，不影响运行 |

@@ -91,6 +91,21 @@ class Node(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    @model_validator(mode="after")
+    def _check_off_on_branch(self) -> "Node":
+        """分支/循环节点不允许 off。
+
+        off 的语义是"跳过本节点"（next=None），但 if 只有 true/false 出口、
+        loop 只有 loop/done 出口 —— 跳过后匹配不到任何边，**整条下游会被静默切断**，
+        而流程仍报成功（实测：禁用 if → true 分支及其后续全不执行，ok=True）。
+        """
+        if self.off and self.type in ("if", "loop", "while", "foreach"):
+            raise ValueError(
+                f"{self.id}: off=true 不能用在分支/循环节点（{self.type}）"
+                "—— 它会被跳过并切断所有下游出口；请删除该节点或换用 if 条件控制"
+            )
+        return self
+
     @property
     def display(self) -> str:
         return self.label or self.type

@@ -150,6 +150,29 @@ async def test_loop_runs_body_n_times():
 
 
 @pytest.mark.asyncio
+async def test_continue_skips_rest_of_round():
+    """continue 必须跳过本轮剩余步骤。
+
+    原来 continue 节点只置 ctx.should_continue，全仓无人读取 —— 它后面的节点照跑，
+    「今天已处理过就跳过」变成再处理一遍（重复提交）。
+    """
+    f = flow(
+        [
+            node("L", "loop", kind="count", count=2),
+            node("c", "continue"),
+            node("b", "noop"),
+            node("z", "noop"),
+        ],
+        [e("L", "c", "loop"), e("c", "b"), e("b", "L"), e("L", "z", "done")],
+    )
+    r = await run_flow(f)
+    ids = [x["node_id"] for x in r["nodes"]]
+    assert ids.count("c") == 2, f"continue 应每轮都执行，实际 {ids.count('c')}"
+    assert "b" not in ids, "continue 之后的节点不该执行"
+    assert ids.count("z") == 1, "done 出口要照常走"
+
+
+@pytest.mark.asyncio
 async def test_loop_zero_rounds():
     f = flow(
         [node("L", "loop", kind="count", count=0), node("b", "noop"), node("z", "noop")],
@@ -181,11 +204,17 @@ async def test_foreach_runs_per_item():
 
 
 @pytest.mark.asyncio
-async def test_expect_without_page_passes():
-    """没有浏览器时 expect 直接放过（不误判失败）。"""
+async def test_expect_without_page_fails():
+    """没有浏览器时 expect 不能算通过 —— 断言没执行等于没有断言。
+
+    旧行为是"无 page 直接放过"，导致桌面流程 / attach 失败 / 页面被关时，
+    「提交成功」这类断言静默通过，正是它该拦住的那类错误结果。
+    """
     f = flow([node("n1", "noop", expect={"text": "永远不会出现"})], [])
     r = await run_flow(f)
-    assert r["ok"] is True
+    assert r["ok"] is False
+    # expect 失败会单独记一条 type=expect 的日志
+    assert any("没有可用页面" in (x.get("error") or "") for x in r["nodes"])
 
 
 # ------------------------------------------------------------ 断点 / 起跑

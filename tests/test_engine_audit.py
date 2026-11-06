@@ -93,3 +93,18 @@ async def test_preflight_lets_valid_flow_through():
     f = Flow(name="t", version=1, nodes=[{"id": "n1", "type": "noop"}], edges=[])
     r = await Runner(f, ExecutionContext(), RunOptions()).execute()
     assert r["ok"] is True
+
+
+# ---------------------------------------------------------------- K2 off 用于分支
+
+
+def test_off_true_rejected_on_branch_nodes():
+    """off=true 用在 if/loop 上会被跳过并切断所有下游出口，仍报成功 —— 装载期就拒。"""
+    from engine.schema import Node
+
+    for t in ("if", "loop", "while", "foreach"):
+        with pytest.raises(ValueError, match="不能用在分支/循环节点"):
+            Node(id="n1", type=t, off=True)
+
+    # 普通节点仍然允许 off（调试时临时关掉某一步的合法用法）
+    assert Node(id="n2", type="noop", off=True).off is True

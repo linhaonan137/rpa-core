@@ -127,7 +127,11 @@ class Runner:
         else:
             self.sch.bootstrap()
 
-        while not self.sch.finished() and not self.stopped:
+        while (
+            not self.sch.finished()
+            and not self.stopped
+            and not getattr(self.ctx, "should_continue", False)
+        ):
             wave = self._drain()
             if not wave:
                 break
@@ -274,7 +278,15 @@ class Runner:
                     f"{node.display} 的 retry-from 不可用（多分支或回退点不在路径上），改停",
                     node=node.id,
                 )
-                self.ctx.should_stop = True
+                # then=skip：回退重试用尽后跳过这个节点继续走。
+                # 原来这里无条件 stop —— 配了 then=skip 也是整单中断（批量任务全回滚）。
+                if node.on_fail is not None and node.on_fail.then == "skip":
+                    tolerated = True
+                    self.ctx.log(
+                        "warn", f"{node.display} 回退重试用尽，按 then=skip 继续", node=node.id
+                    )
+                else:
+                    self.ctx.should_stop = True
             else:
                 self.ctx.should_stop = True
 
@@ -381,6 +393,11 @@ class Runner:
                 self.ctx.pop_loop()
                 self.ctx.pop_scope()
 
+            if self.ctx.should_continue:
+                # continue：结束本轮，进下一轮。原来只置标志没人读，continue 之后的
+                # 步骤照跑 —— “今天已经处理过就跳过”会变成再处理一遍（重复提交）。
+                self.ctx.should_continue = False
+                continue
             if self.ctx.should_break:
                 self.ctx.should_break = False
                 break
@@ -442,7 +459,9 @@ class Runner:
         assert exp is not None
         page = self.ctx.page
         if page is None:
-            return True, ""
+            # 不能"没页面就算通过"：桌面流程 / attach 失败 / 页面被关时，
+            # 「提交成功」这类断言会静默放行 —— 恰恰是它该拦住的那类错误结果。
+            return False, "expect 需要页面，但当前没有可用页面（断言未执行，按失败计）"
 
         deadline = time.perf_counter() + exp.limit_ms / 1000
         last = ""
@@ -453,13 +472,18 @@ class Runner:
                 elif exp.text and exp.text not in (await page.content()):
                     last = f"页面不含文本 {exp.text}"
                 elif exp.target:
-                    loc = page.locator(exp.target) if not exp.target.startswith("@el:") else None
-                    if loc is None:
-                        return False, f"expect.target 需要元素库支持: {exp.target}"
+                    # 支持 @el: 引用（原来直接返回"需要元素库支持"，写了 @el: 的断言必失败）
+                    from nodes.web import _locate
+
+                    loc = await _locate(page, exp.target, None, self.ctx, 5000)
                     n = await loc.count()
-                    if n == 0:
+                    state = exp.state or "visible"
+                    if state == "hidden":
+                        # hidden：不存在或不可见都算通过（schema 早就支持，以前没实现）
+                        last = "" if (n == 0 or not await loc.first.is_visible()) else f"元素仍然可见: {exp.target}"
+                    elif n == 0:
                         last = f"元素不存在: {exp.target}"
-                    elif exp.state == "visible" and not await loc.first.is_visible():
+                    elif state == "visible" and not await loc.first.is_visible():
                         last = f"元素不可见: {exp.target}"
                 else:
                     return True, ""

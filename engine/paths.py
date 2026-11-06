@@ -128,6 +128,18 @@ def bootstrap_frozen() -> list[str]:
             released.append(name)
         except Exception:  # noqa: BLE001 - 释放失败不该让程序起不来
             pass
+
+    # 元素库也要释放：不释放的话打包后 exe 目录没有 elements.json，
+    # 所有 @el: 都报"元素库里没有"（开发机一切正常，只有交付件坏）。
+    # 用户已有的库不覆盖，否则升级会把人工拾取的元素冲掉。
+    elems = src / "elements.json"
+    dst = PROJECT_ROOT / "elements.json"
+    if elems.exists() and not dst.exists():
+        try:
+            shutil.copy2(elems, dst)
+            released.append("elements.json")
+        except Exception:  # noqa: BLE001
+            pass
     return released
 
 
