@@ -90,7 +90,15 @@ rpa.exe run flows\demo.json
 | `web_fill` | `web_type` |
 | `web_network` | `web_net` |
 
-`web_open` / `web_click` / `web_extract` / `web_wait` / `sleep` / `data_sheet_write` 是同名的。
+`web_open` / `web_click` / `web_extract` / `web_wait` / `sleep` / `web_key` / `web_upload` / `data_sheet_write` 是同名的。
+
+### iframe、键盘、流程回放的三条边界（实测）
+
+| 场景 | 正确做法 |
+|---|---|
+| 进了 iframe 要跑任意 JS | `web_switch(kind=iframe)` 之后 `web_read(kind=eval)` 会在 **iframe 内** 执行（内部走 `content_frame().evaluate`）。`web_scan` 仍只扫主文档 |
+| 关 Fusion 浮层、全选、逐字输入 | 用 `web_key`（`Escape` / `Control+A` / `kind=type`）。**合成 `KeyboardEvent` 关不掉弹层**，必须 CDP 原生按键 |
+| `flow_run` 回放 | 优先复用 `web_open(kind=attach)` 接管的浏览器。MCP 服务没设 `RPA_CDP` 也不会再 launch 一个无登录态的新浏览器（否则千牛直接跳登录页）|
 
 ### 顶层契约
 

@@ -1458,6 +1458,29 @@ async def web_exec(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     return Result.done("已执行注入脚本", data=result)
 
 
+async def _eval_root(ctx: ExecutionContext) -> Any:
+    """按 ctx.frames 拿到可 evaluate 的对象：主文档 Page 或真实 Frame。
+
+    frame_locator 没有 evaluate()，所以要把 iframe 选择器解析成 ElementHandle，
+    再 content_frame() 逐层进去。web_js / web_read(kind=eval) 用这个，
+    进了 iframe 之后也能跑任意 JS（之前只能在主文档跑）。
+    """
+    page = _page(ctx)
+    root: Any = page
+    for sel in _safe_list(getattr(ctx, "frames", None) or []):
+        frame = None
+        try:
+            handle = await root.locator(sel).element_handle()
+            if handle is not None:
+                frame = await handle.content_frame()
+        except Exception:  # noqa: BLE001
+            frame = None
+        if frame is None:
+            return page            # 进不去就明确退回主文档，不假装还在 iframe 里
+        root = frame
+    return root
+
+
 @register("web_js", raw=("code",))
 @_guard
 async def web_js(args: dict[str, Any], ctx: ExecutionContext) -> Result:
@@ -1470,10 +1493,53 @@ async def web_js(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     code = _script(ctx, args, "code")
     if not code:
         raise _NodeError("web_js 缺 code")
-    result = await page.evaluate(code)
+    target = await _eval_root(ctx)   # 跟随 ctx.frames：iframe 内也能跑 JS
+    result = await target.evaluate(code)
     _save(ctx, args, result)
     await _settle(args)
     return Result.done("JS 已执行", data=result)
+
+
+@register("web_key")
+@_guard
+async def web_key(args: dict[str, Any], ctx: ExecutionContext) -> Result:
+    """原生键盘事件。args: {key, text, kind=press|type|down|up, delay_ms, jitter?}
+
+    合成 KeyboardEvent 对 React / Fusion 浮层无效（实测派发 Escape 关不掉弹层），
+    必须走 CDP 的 Input.dispatchKeyEvent —— 也就是 page.keyboard.*。
+
+      {"key": "Escape"}                  关浮层
+      {"key": "Control+A"}               全选
+      {"kind": "type", "text": "abc"}    逐字输入（React 受控组件）
+    """
+    page = _page(ctx)
+    kind = str(args.get("kind") or "press").lower()
+    key = str(args.get("key") or "").strip()
+    text = _text(ctx, args, "text", "") or ""
+    delay = _ms(ctx, args, "delay_ms", 0)
+    kb = page.keyboard
+
+    if kind == "type":
+        payload = text or key
+        if not payload:
+            return Result.fail("web_key kind=type 需要 text")
+        await kb.type(payload, delay=delay)
+        what = f"type {payload!r}"
+    elif kind in ("down", "up"):
+        if not key:
+            return Result.fail(f"web_key kind={kind} 需要 key")
+        await getattr(kb, kind)(key)
+        what = f"{kind} {key}"
+    elif kind == "press":
+        if not key:
+            return Result.fail("web_key kind=press 需要 key（Escape / Control+A / Enter ...）")
+        await kb.press(key, delay=delay)
+        what = f"press {key}"
+    else:
+        return Result.fail(f"web_key 不支持 kind={kind}")
+
+    await _settle(args)
+    return Result.done(f"键盘 {what}")
 
 
 # ================================================================ 等待与判断

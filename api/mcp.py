@@ -42,6 +42,21 @@ _SHARED_BROWSER: dict[str, Any] = {}
 
 async def _attach_shared_browser(ctx: ExecutionContext) -> None:
     """把进程级共享浏览器挂到给定 ctx 上；首次调用才真正启动或接管。"""
+    # 优先复用当前 MCP 会话已 attach 的浏览器（用户手动开的 Ant / web_open(kind=attach)）。
+    # MCP 服务进程往往没设 RPA_CDP，若放任它 launch，flow_run 会拿到一个没有登录态的
+    # 新浏览器 —— 实测千牛直接跳登录页，n2 等 20s 超时。
+    # 每次都以 _ctx 为准：用户随时可能重新 attach 到另一只浏览器。
+    attached = getattr(_ctx, "page", None)
+    if attached is not None:
+        bctx = getattr(attached, "context", None)
+        browser = getattr(bctx, "browser", None) if bctx is not None else None
+        if bctx is not None and browser is not None:
+            _SHARED_BROWSER.update(browser=browser, context=bctx, _pw=None, cdp="")
+            setattr(ctx, "_ant_owned", True)   # 浏览器不归我们管，别关
+            ctx.browser = browser
+            ctx.browser_context = bctx
+            return
+
     if _SHARED_BROWSER.get("context") is not None:
         ctx.browser = _SHARED_BROWSER["browser"]
         ctx.browser_context = _SHARED_BROWSER["context"]
@@ -368,6 +383,24 @@ async def web_fill(
             r["verified"] = True
             r["actual"] = got
     return r
+
+
+@mcp.tool
+async def web_key(
+    key: str = "",
+    text: str = "",
+    kind: Literal["press", "type", "down", "up"] = "press",
+    delay_ms: int = 0,
+) -> dict[str, Any]:
+    """原生键盘：按 Escape / Control+A / Enter，或逐字输入。
+
+    合成 KeyboardEvent 关不掉 React 浮层，必须走 CDP 原生按键。
+      press: key="Escape" / "Control+A" / "Enter"
+      type:  kind="type", text="内容", delay_ms=60
+    """
+    return await _call("web_key", {
+        "key": key, "text": text, "kind": kind, "delay_ms": delay_ms,
+    })
 
 
 @mcp.tool
