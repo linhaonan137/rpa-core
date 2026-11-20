@@ -197,7 +197,12 @@ async def _attach_shared_browser_locked(ctx: ExecutionContext) -> None:
         bctx = getattr(attached, "context", None)
         browser = getattr(bctx, "browser", None) if bctx is not None else None
         if bctx is not None and browser is not None:
-            _SHARED_BROWSER.update(browser=browser, context=bctx, _pw=None, cdp="")
+            # cdp 保留已知值：这条路只是"复用已有页面"，不代表不是接管来的。
+            # 早先写死 ""，导致跑一次 flow_run 就把端点信息冲掉，list_tabs 再查就是空。
+            _SHARED_BROWSER.update(
+                browser=browser, context=bctx, _pw=None,
+                cdp=_SHARED_BROWSER.get("cdp") or "",
+            )
             setattr(ctx, "_ant_owned", True)   # 浏览器不归我们管，别关
             ctx.browser = browser
             ctx.browser_context = bctx
