@@ -208,29 +208,31 @@ async def _attach_shared_browser_locked(ctx: ExecutionContext) -> None:
             return
         _SHARED_BROWSER.clear()   # 缓存失效，往下走重新接管
 
-    # ③ CDP 接管：环境变量优先，其次上次记录的端点，最后自动扫端口
-    cdp = (os.getenv("RPA_CDP") or "").strip() or _last_cdp()
-    if not cdp:
-        cdp = _discover_cdp()
-        if cdp:
-            ctx.log("info", f"自动发现浏览器: {cdp}")
-    if cdp:
-        from playwright.async_api import async_playwright
+    # ③ CDP 接管：按 环境变量 → 上次记录 → 自动扫描 依次尝试。
+    # 必须逐个试而不是"取到一个就定死"：上次记录的端点可能已经死了
+    # （浏览器关了/换了随机端口），那种情况下还要能退回到自动发现。
+    candidates: list[str] = []
+    for item in ((os.getenv("RPA_CDP") or "").strip(), _last_cdp(), _discover_cdp()):
+        if item and item not in candidates:
+            candidates.append(item)
 
+    from playwright.async_api import async_playwright
+
+    for cdp in candidates:
         try:
             pw = await async_playwright().start()
             browser = await pw.chromium.connect_over_cdp(cdp, timeout=15_000)
             contexts = list(getattr(browser, "contexts", None) or [])
             context = contexts[0] if contexts else await browser.new_context()
-        except Exception as exc:  # noqa: BLE001 - 浏览器没开就连不上
+        except Exception as exc:  # noqa: BLE001 - 这个端点没开就连不上，试下一个
             ctx.log("warn", f"CDP 接管失败 {cdp}: {type(exc).__name__}: {exc}")
-            cdp = ""
-        else:
-            setattr(ctx, "_ant_owned", True)
-            _SHARED_BROWSER.update(browser=browser, context=context, _pw=pw, cdp=cdp)
-            ctx.browser = _SHARED_BROWSER["browser"]
-            ctx.browser_context = _SHARED_BROWSER["context"]
-            return
+            continue
+        setattr(ctx, "_ant_owned", True)
+        _SHARED_BROWSER.update(browser=browser, context=context, _pw=pw, cdp=cdp)
+        ctx.browser = _SHARED_BROWSER["browser"]
+        ctx.browser_context = _SHARED_BROWSER["context"]
+        _remember_cdp(cdp)  # 下次直接连它，不用再扫端口
+        return
 
     # ④ 最后手段：launch（默认**禁止**）
     # 用户要求：只要当前登录态浏览器活着就绝不新开。接管的浏览器不可达时
@@ -271,6 +273,24 @@ async def _attach_shared_browser_locked(ctx: ExecutionContext) -> None:
 # ---------------------------------------------------------------- 内部工具
 
 
+def _unknown_node_types(flow: Any) -> list[str]:
+    """流程里写了没注册的节点类型（多为拼错）。带最近似的建议。"""
+    import difflib
+
+    from engine.registry import registry as _reg
+
+    known = _reg.types()
+    bad: list[str] = []
+    for n in getattr(flow, "nodes", None) or []:
+        t = str(getattr(n, "type", ""))
+        if _reg.has(t):
+            continue
+        hint = difflib.get_close_matches(t, known, n=2, cutoff=0.6)
+        tip = f"（是不是 {' / '.join(hint)}？）" if hint else ""
+        bad.append(f"{getattr(n, 'id', '?')}({t}){tip}")
+    return bad
+
+
 def _call_ghost_refs() -> list[str]:
     """启动自检：扫描本文件里 `_call("node_type")` 的字面量，找出没注册的节点。
 
@@ -281,7 +301,6 @@ def _call_ghost_refs() -> list[str]:
     from pathlib import Path
 
     from engine.registry import registry
-
     try:
         src = Path(__file__).read_text(encoding="utf-8")
     except Exception:  # noqa: BLE001
@@ -623,7 +642,7 @@ async def web_switch(
 
     - `kind="iframe"`：进 iframe（`target` 给 iframe 的 css，或 `index` 给序号）
     - `kind="main"`：回到主文档（清空 iframe 链）
-    - `kind="tab"`：切浏览器标签（`title` 给标题/域名片段，或 `index` 给序号）
+    - `kind="tab"`：切浏览器标签（`title` 给标题或 URL 片段，先匹配标题再匹配 URL；或 `index` 给序号）
 
     切完之后所有定位都在新的上下文里生效。
     """
@@ -633,8 +652,15 @@ async def web_switch(
     if kind == "main":
         return await _call("web_frame_out", {})
     if kind == "tab":
-        a: dict[str, Any] = {"kind": "title", "title": title, "match": "contains"} if title else {"kind": "index", "index": index}
-        return await _call("web_tab", a)
+        if title:
+            # 先按标题匹配，不中再按 URL —— 同名标签（如两个「Quotes to Scrape」）
+            # 只能靠 URL 区分，文档里承诺的"域名片段"要在这一步兑现。
+            r = await _call("web_tab", {"kind": "title", "title": title, "match": "contains"})
+            if r.get("ok"):
+                return r
+            by_url = await _call("web_tab", {"kind": "url", "url": title, "match": "contains"})
+            return by_url if by_url.get("ok") else r
+        return await _call("web_tab", {"kind": "index", "index": index})
     a = {"kind": "target", "target": target} if target else {"kind": "index", "index": index}
     return await _call("web_frame_in", a)
 
@@ -995,7 +1021,12 @@ async def list_tabs() -> dict[str, Any]:
     if page is None:
         return {"ok": False, "error": "还没连接浏览器，先 web_open"}
     try:
-        pages = page.context.pages
+        # 必须和 web_tab 用同一个来源（nodes.web._all_pages），否则两边的 index
+        # 不是一回事：这里拿 context.pages，web_tab 拿 browser.contexts 全量，
+        # 多 context 时按 list_tabs 的序号去切会切到别的页。
+        from nodes.web import _all_pages
+
+        pages = _all_pages(_ctx)
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": f"取页面列表失败: {type(exc).__name__}: {exc}"}
 
@@ -1563,6 +1594,11 @@ async def flow_save(flow: str, content: dict) -> dict[str, Any]:
     # 不拦的话 flow_run 会返回 ok:true + 0 步，Agent 会以为跑通了
     if not f.nodes:
         return {"ok": False, "error": "流程至少要有一个节点（nodes 为空）"}
+    # 节点类型也在这里查：schema 只保证字段合法，`web_clik` 这种拼错能存下去，
+    # 要到跑的时候才炸 —— 那时还可能先撞上"没有浏览器"这类无关错误，真因被盖住。
+    bad = _unknown_node_types(f)
+    if bad:
+        return {"ok": False, "error": "流程里有未注册的节点类型：" + "；".join(bad)}
 
     p = FLOW_DIR / f"{flow}.json"
     # 覆盖前留快照：flow_patch 一直有 .versions，flow_save 却没有 ——
@@ -1668,6 +1704,12 @@ async def flow_run(
         f = Flow(**json.loads(p.read_text(encoding="utf-8")))
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": f"流程校验失败: {exc}"}
+
+    # 节点类型要在挂浏览器之前查：否则"没有可接管的浏览器"会先抛出来，
+    # 把真正的错（节点名拼错）盖掉，排查方向直接跑偏。
+    bad = _unknown_node_types(f)
+    if bad:
+        return {"ok": False, "error": "流程里有未注册的节点类型：" + "；".join(bad)}
 
     from engine.context import ExecutionContext as EC
 

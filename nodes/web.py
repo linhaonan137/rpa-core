@@ -658,10 +658,15 @@ def _match(value: str, pattern: str, mode: str) -> bool:
 # ---------------------------------------------------------------- 路径
 
 
-def _out_path(ctx: ExecutionContext, args: dict[str, Any], default_name: str) -> str:
+def _out_path(
+    ctx: ExecutionContext, args: dict[str, Any], default_name: str, default_suffix: str = ""
+) -> str:
     """path 当目录用（自动建），带后缀则当完整文件路径。默认落在 out/。
 
     **相对路径基于项目根，不跟随 cwd**（MCP 场景实测：截图落到了客户端工作目录）。
+
+    `default_suffix`：`name` 没写扩展名时补上。Playwright 靠扩展名推断图片格式，
+    少了就报 `unsupported mime type ""` —— 那是句看不出原因的错。
     """
     from engine.paths import OUT_DIR, resolve_path
 
@@ -672,6 +677,8 @@ def _out_path(ctx: ExecutionContext, args: dict[str, Any], default_name: str) ->
         return str(p)
     p.mkdir(parents=True, exist_ok=True)
     name = _text(ctx, args, "name", "") or default_name
+    if default_suffix and not Path(name).suffix:
+        name = f"{name}.{default_suffix}"
     return str(p / name)
 
 
@@ -2219,7 +2226,7 @@ async def web_shot(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     """args: {kind=page|full|element, target, hints, path, name, save_as}"""
     page = _page(ctx)
     kind = args.get("kind", "page")
-    path = _out_path(ctx, args, _stamp_name("shot"))
+    path = _out_path(ctx, args, _stamp_name("shot"), "png")
 
     if kind == "element":
         target = _need(ctx, args, "target", "web_shot")
@@ -2241,7 +2248,7 @@ async def web_download(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     page = _page(ctx)
     kind = args.get("kind", "click")
     limit = _ms(ctx, args, "limit_ms", DEFAULT_LIMIT_MS)
-    path = _out_path(ctx, args, _stamp_name("download", "bin"))
+    path = _out_path(ctx, args, _stamp_name("download", "bin"), "bin")
 
     if kind == "url":
         url = _need(ctx, args, "url", "web_download")
@@ -2290,7 +2297,7 @@ async def web_save_img(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     page = _page(ctx)
     target = _need(ctx, args, "target", "web_save_img")
     limit = _ms(ctx, args, "limit_ms", DEFAULT_LIMIT_MS)
-    path = _out_path(ctx, args, _stamp_name("image"))
+    path = _out_path(ctx, args, _stamp_name("image"), "png")
 
     loc = await _locate(page, target, args.get("hints"), ctx, limit)
     el = await _pick(loc, target, limit)

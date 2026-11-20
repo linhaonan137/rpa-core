@@ -213,6 +213,7 @@ async def test_attach_launches_only_when_everything_dead(monkeypatch):
     monkeypatch.setenv("RPA_CDP", "")
     monkeypatch.setenv("RPA_ALLOW_LAUNCH", "1")   # 显式允许自建
     monkeypatch.setattr(mcp_mod, "_last_cdp", lambda: "")
+    monkeypatch.setattr(mcp_mod, "_discover_cdp", lambda: "")  # 不让本机真浏览器干扰
 
     new_bctx = MagicMock()
 
@@ -234,6 +235,7 @@ async def test_attach_refuses_launch_without_explicit_flag(monkeypatch):
     monkeypatch.setenv("RPA_CDP", "")
     monkeypatch.delenv("RPA_ALLOW_LAUNCH", raising=False)
     monkeypatch.setattr(mcp_mod, "_last_cdp", lambda: "")
+    monkeypatch.setattr(mcp_mod, "_discover_cdp", lambda: "")  # 不让本机真浏览器干扰
 
     async def must_not_launch(*args, **kwargs):  # noqa: ANN001
         raise AssertionError("未允许时不该 launch")
