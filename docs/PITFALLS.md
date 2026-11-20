@@ -15,6 +15,7 @@
 | `on_fail` / `expect` 写了非法值当时不报 | 直接赋值落盘没过 schema | 写盘前用模型校验，非法直接拒 |
 | `limit_steps` 设了没用 | 循环每轮 `new Runner(max_steps=…)` 拿完整预算 | 子 Runner 传**剩余预算** |
 | 流程名传 `../xxx` 写到项目外 | 直接用名字拼路径 | 统一 `_safe_flow()` 拒绝 `..` 和分隔符 |
+| `element_drop` 报成功，元素还在，库只增不减 | `save()` 是合并写（reload 磁盘后按 key 合并），**合并表达不了"消失"**；内存删掉的条目磁盘上还在，被原样合回来 | 删除必须显式记墓碑（`deleted` 表）+ 文件锁 + 重拾时显式清墓碑；见 `tests/test_elements.py` 四个用例 |
 
 ## 假成功（比报错更危险）
 

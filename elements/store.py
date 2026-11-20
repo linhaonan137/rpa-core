@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
@@ -27,6 +28,58 @@ RefIndex = dict[str, set[str]]
 
 class ElementError(Exception):
     pass
+
+
+@contextmanager
+def _file_lock(path: str, timeout: float = 5.0):
+    """跨进程排他锁（Windows 用 msvcrt，POSIX 用 flock）。
+
+    为什么需要：`save()` 是"读磁盘 → 合并 → 写回"，两个进程同时进来就会
+    各自读到旧快照再互覆盖。加了锁，这段才是真正的 read-modify-write。
+    锁文件单独放（不是锁 elements.json 本身）——文件会被 os.replace 换掉，
+    锁在它上面会跟着失效。
+    """
+    d = os.path.dirname(path)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    f = open(path, "a+b")
+    try:
+        f.seek(0, os.SEEK_END)
+        if f.tell() == 0:      # 空文件锁 1 字节会失败，先垫一个
+            f.write(b"\0")
+            f.flush()
+        deadline = time.time() + timeout
+        while True:
+            try:
+                f.seek(0)
+                if os.name == "nt":
+                    import msvcrt
+
+                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.time() >= deadline:
+                    raise ElementError(f"元素库被占用，{timeout}s 内拿不到锁: {path}") from None
+                time.sleep(0.02)
+        yield
+    finally:
+        try:
+            f.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        f.close()
 
 
 @dataclass
@@ -145,6 +198,16 @@ class ElementStore:
         self.path = os.fspath(path) if path is not None else None
         self._items: dict[str, ElementEntry] = {}
         self._refs: RefIndex = {}
+        #: 载入时磁盘上已有的 key。save() 用它算"本实例删了谁"——
+        #  合并写只会新增/更新，不靠这个的话删除永远落不了盘（实测 element_drop
+        #  报成功但条目还在，库只增不减）。
+        #: 墓碑：key → 删除时间。合并写里"删除"必须显式记录，
+        #  否则任何持有旧副本的实例写回统计时都会把删掉的条目复活（实测）。
+        self._deleted: dict[str, str] = {}
+        #: 本实例重新拾取过的 key。墓碑按秒记，同一秒内"删了又加"分不出先后，
+        #  所以复活必须是显式动作，不能靠时间戳比较。
+        self._revived: set[str] = set()
+        self._loaded_keys: set[str] = set()
         if path and os.path.exists(path):
             self.load()
 
@@ -157,47 +220,91 @@ class ElementStore:
             raw = json.load(f)
         data = raw.get("elements", raw) if isinstance(raw, dict) else {}
         self._items = {k: ElementEntry.from_dict({**v, "key": k}) for k, v in data.items()}
+        tomb = raw.get("deleted") if isinstance(raw, dict) else None
+        self._deleted = dict(tomb) if isinstance(tomb, dict) else {}
+        # 墓碑优先：磁盘上若还残留已删条目，读的时候就不该再有
+        for key in [k for k in self._items if k in self._deleted]:
+            self._items.pop(key, None)
+        self._loaded_keys = set(self._items)
 
     def save(self) -> None:
-        """落盘（合并写）。
+        """落盘（持锁 read-modify-write）。
 
         两个进程（HTTP 服务 / MCP 服务）共享同一个 elements.json。原来直接把
         构造时的 `_items` 全量重写，另一个进程在这期间新增的条目会被旧快照覆盖
-        —— 实测 `web_pick` 报成功但库里没有，就是这个。这里改成：
-          1. 先 reload 磁盘现状，按 key 合并（同 key 取 mtime 新的）
-          2. tmp 文件名带 pid，避免两进程撞同一个 .tmp 写坏文件
+        —— 实测 `web_pick` 报成功但库里没有，就是这个。
+
+        现在：进锁 → 重读磁盘 → **先应用本实例的删除** → 再按 key 合并新增/更新
+        → 原子换入。删除必须显式做，因为"合并"天然表达不了"消失"。
+
+        已知边界：如果 A 进程删了某条、B 进程几乎同时更新同一条的统计，
+        B 的写回会把它复活。概率很低（要恰好同一条），不为此引入墓碑表。
         """
         if not self.path:
             return
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
 
-        merged: dict[str, Any] = {}
-        if os.path.exists(self.path):
-            try:
-                with open(self.path, encoding="utf-8") as f:
-                    raw = json.load(f)
-                data = raw.get("elements", raw) if isinstance(raw, dict) else {}
-                merged = {k: ElementEntry.from_dict({**v, "key": k}) for k, v in data.items()}
-            except Exception:  # noqa: BLE001 - 磁盘文件坏了就用内存的覆盖回去
-                merged = {}
-        for key, entry in self._items.items():
-            old = merged.get(key)
-            if old is None or _mtime(entry) >= _mtime(old):
-                merged[key] = entry
-        self._items = merged
-
-        payload = {"version": 1, "elements": {k: v.to_dict() for k, v in merged.items()}}
-        tmp = f"{self.path}.{os.getpid()}.tmp"
-        try:
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, self.path)  # 原子写：不会留半截文件
-        finally:
-            if os.path.exists(tmp):
+        with _file_lock(self.path + ".lock"):
+            merged: dict[str, Any] = {}
+            if os.path.exists(self.path):
                 try:
-                    os.remove(tmp)
-                except OSError:
+                    with open(self.path, encoding="utf-8") as f:
+                        raw = json.load(f)
+                    data = raw.get("elements", raw) if isinstance(raw, dict) else {}
+                    merged = {k: ElementEntry.from_dict({**v, "key": k}) for k, v in data.items()}
+                except Exception:  # noqa: BLE001 - 磁盘文件坏了就用内存的覆盖回去
+                    merged = {}
+
+            # ① 本实例载入过、现在内存里没有的 → 是删掉的，记墓碑
+            for key in list(self._loaded_keys):
+                if key not in self._items and key not in self._deleted:
+                    self._deleted[key] = _now()
+
+            # ② 合并墓碑（同 key 取早的：删除一旦发生就不该被后来的"复活"覆盖）
+            tomb: dict[str, str] = {}
+            if os.path.exists(self.path):
+                try:
+                    with open(self.path, encoding="utf-8") as f:
+                        on_disk = json.load(f)
+                    if isinstance(on_disk, dict) and isinstance(on_disk.get("deleted"), dict):
+                        tomb.update({k: str(v) for k, v in on_disk["deleted"].items()})
+                except Exception:  # noqa: BLE001
                     pass
+            for key, ts in self._deleted.items():
+                tomb[key] = min(tomb.get(key, ts), ts)
+            for key in self._revived:      # 本实例重新拾取过的，墓碑作废
+                tomb.pop(key, None)
+            # 磁盘上已经有、但墓碑比它更新时间还新的 → 不保留（挡住"旧副本复活")
+            for key in list(merged):
+                if key in tomb and tomb[key] >= _mtime(merged[key]):
+                    merged.pop(key, None)
+
+            # ③ 合并本实例的新增 / 更新（墓碑更新的条目一律不写回）
+            for key, entry in self._items.items():
+                if key in tomb and tomb[key] >= _mtime(entry):
+                    continue
+                old = merged.get(key)
+                if old is None or _mtime(entry) >= _mtime(old):
+                    merged[key] = entry
+
+            self._deleted = tomb
+            payload = {"version": 2, "elements": {k: v.to_dict() for k, v in merged.items()},
+                       "deleted": tomb}
+            tmp = f"{self.path}.{os.getpid()}.tmp"
+            try:
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(payload, f, ensure_ascii=False, indent=2)
+                os.replace(tmp, self.path)  # 原子写：不会留半截文件
+            finally:
+                if os.path.exists(tmp):
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
+
+        self._items = merged
+        self._loaded_keys = set(merged)
+        self._revived.clear()
 
     # ---------------------------------------------------------- CRUD
 
@@ -207,6 +314,8 @@ class ElementStore:
             raise ElementError(f"元素已存在: {entry.key}（要覆盖请传 overwrite=True）")
         entry.meta.setdefault("created_at", _now())
         entry.meta.setdefault("source", "manual")
+        self._deleted.pop(entry.key, None)   # 重新拾取同名元素 → 墓碑作废
+        self._revived.add(entry.key)
         # 初始就写 0：不写的话 JSON 里没有这两个键，读出来是 None（看着像"没统计"）
         entry.meta.setdefault("hits", 0)
         entry.meta.setdefault("misses", 0)
@@ -229,6 +338,8 @@ class ElementStore:
             raise ElementError(f"{key} 仍被引用，不能删: {sorted(users)}（要强删请传 force=True）")
         del self._items[key]
         self._refs.pop(key, None)
+        # 记墓碑：让别的实例手里的旧副本写回时不会把它复活
+        self._deleted[key] = _now()
 
     def keys(self) -> list[str]:
         return sorted(self._items)

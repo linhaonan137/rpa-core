@@ -160,3 +160,75 @@ def test_scan_refs_finds_element_refs():
 def test_scan_refs_nested():
     flows = [{"name": "f", "nodes": [{"id": "n", "args": {"a": {"b": ["@el:deep"]}}}]}]
     assert scan_refs(flows) == {"deep": {"f:n"}}
+
+
+# ------------------------------------------------------------ 删除落盘语义
+#
+# save() 是"合并写"（多进程共享 elements.json，不能整份覆盖），
+# 但合并天然表达不了"消失"：内存删掉的条目，磁盘上还在，会原样合并回来。
+# 实测 element_drop 报告成功、库里条目还在，元素库只增不减。
+# 修法：墓碑（deleted 表）+ 文件锁 + 显式复活记录。
+
+
+def _mk(key: str, css: str = "#x", name: str = "N"):
+    return ElementEntry(key=key, css=css, role="button", name=name)
+
+
+def test_remove_persists(tmp_path):
+    p = str(tmp_path / "el.json")
+    s = ElementStore(p)
+    s.add(_mk("k1"))
+    s.save()
+    assert ElementStore(p).has("k1")
+
+    d = ElementStore(p)
+    d.remove("k1", force=True)
+    d.save()
+    assert not ElementStore(p).has("k1"), "删除必须落盘"
+
+
+def test_stale_copy_does_not_resurrect(tmp_path):
+    """持旧副本的实例写回（比如更新 hits）不能把删掉的条目复活。"""
+    p = str(tmp_path / "el.json")
+    s = ElementStore(p)
+    s.add(_mk("k2"))
+    s.save()
+
+    stale = ElementStore(p)          # 删除发生前载入的副本
+    rm = ElementStore(p)
+    rm.remove("k2", force=True)
+    rm.save()
+
+    stale.get("k2").hit()            # 旧副本写回统计
+    stale.save()
+    assert not ElementStore(p).has("k2"), "旧副本不该复活已删条目"
+
+
+def test_readd_same_second_clears_tombstone(tmp_path):
+    """墓碑按秒记，同一秒内删除后重新拾取必须能成功（靠显式复活，不靠时间戳）。"""
+    p = str(tmp_path / "el.json")
+    s = ElementStore(p)
+    s.add(_mk("k3"))
+    s.save()
+
+    rm = ElementStore(p)
+    rm.remove("k3", force=True)
+    rm.save()
+
+    add = ElementStore(p)
+    add.add(_mk("k3", css="#k3b", name="K3b"))
+    add.save()
+    assert ElementStore(p).has("k3"), "重新拾取应覆盖墓碑"
+
+
+def test_concurrent_add_not_lost(tmp_path):
+    """两个实例各自新增，互不覆盖（合并写的初衷，不能被删除逻辑破坏）。"""
+    p = str(tmp_path / "el.json")
+    a = ElementStore(p)
+    b = ElementStore(p)
+    a.add(_mk("ka"))
+    a.save()
+    b.add(_mk("kb"))
+    b.save()
+    final = ElementStore(p)
+    assert final.has("ka") and final.has("kb")

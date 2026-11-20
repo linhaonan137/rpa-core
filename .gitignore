@@ -47,3 +47,6 @@ flows/_schedule.json
 _tmp/
 _tmp_*
 !env.example
+
+# 元素库文件锁（运行时生成，不是数据）
+*.lock
