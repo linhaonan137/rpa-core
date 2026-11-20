@@ -62,6 +62,9 @@ pytest tests -q                         # 全量测试
 `RPA_ALLOW_LAUNCH=1` 时再加 `RPA_LAUNCH_PORT=9333`，自建的那只会开放调试端口——下次启动直接接管同一只，登录态不用重登。
 
 > 纯数据流程（没有 `web_*` 节点）不会碰浏览器，不需要任何配置。
+>
+> **一只浏览器只给一个客户端。** 同时被两个自动化工具接管时，弹窗会被另一方自动关掉，
+> `web_dialog` 会报 `No dialog is showing`。调试请另开端口 + 独立 profile。详见 `docs/PITFALLS.md` 的 B11。
 
 ## 流程格式
 

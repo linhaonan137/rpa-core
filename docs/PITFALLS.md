@@ -103,6 +103,7 @@
 | B9 | 标签页下标随当前页漂移 | 按序号切标签之前 |
 | B10 | 接管端点失效要等满 15 秒超时 | 换浏览器 / 端口变了之后 |
 | D5 | 改完代码没重启，服务还在跑旧代码 | 让 Agent 验证功能之前 |
+| B11 | 同一浏览器被多个客户端接管时弹窗必失败 | 调试 / 多工具并存时用 `web_dialog` |
 
 **B9 怎么绕**：`_all_pages` 把 `ctx.page` 放第一位（适合"找页"），拿它当序号用会漂——
 切到第 2 个标签页再列一次，原来的 0 号变成了 1 号。序号统一走 `_stable_pages`
@@ -111,6 +112,27 @@
 **B10 怎么绕**：`_last_cdp.txt` 里的端点会过期（浏览器关了、Playwright 换随机端口）。
 直接 `connect_over_cdp` 撞死端点是 15 秒超时，冷启动就卡在那。接管前先做端口预检
 （`_port_open`，0.05 秒），实测从 15s+ 降到 0.53s。
+
+**B11 怎么绕**：Playwright 对"没有监听器的弹窗"默认是**自动关掉**。两个客户端连同一只浏览器时，
+弹窗事件两边都收到，没挂监听的那一方立刻把它 dismiss 掉，于是挂监听的一方报
+
+```
+Dialog.accept: Protocol error (Page.handleJavaScriptDialog): No dialog is showing
+Cannot accept dialog which is already handled
+```
+
+**判据**：先看是不是代码问题——用裸 Playwright 连同一只浏览器复现一次：
+
+```python
+page.once("dialog", handler)        # handler 里 await dialog.accept()
+await page.evaluate("(setTimeout(()=>confirm('x'), 2000), 1)")
+```
+
+裸层也报同样的错 → 就是客户端冲突，不是节点 bug。换一只干净浏览器（不同
+`--remote-debugging-port` + 不同 `--user-data-dir`）复现，正常即证实。
+
+**对策**：一只浏览器只给一个客户端。调试时另开端口（如 9444 + 独立 profile），
+别和 MCP 服务抢同一只。同一进程内多次调用不受影响。
 
 **D5 怎么绕**：MCP / HTTP 服务只在启动时 import 一次代码，改文件不生效。验证前先对时间：
 
