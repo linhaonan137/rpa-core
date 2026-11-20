@@ -603,8 +603,41 @@ async def _new_page(context: Any) -> Any:
     return page
 
 
+def _stable_pages(ctx: ExecutionContext) -> list[Any]:
+    """按浏览器自身顺序列出标签页，**下标稳定**。
+
+    和 `_all_pages` 的区别：那个把 ctx.page 放第一位（适合"找页"），
+    切完标签页再列一次，同一个下标指向的页就变了 —— 按序号切会切错。
+    这里保持 browser.contexts[*].pages 的原始顺序，ctx.page 只在不在其中时补末尾。
+    """
+    out: list[Any] = []
+    seen: set[int] = set()
+
+    def _add(p: Any) -> None:
+        if p is None or id(p) in seen:
+            return
+        seen.add(id(p))
+        out.append(p)
+
+    browser = getattr(ctx, "browser", None)
+    if browser is not None:
+        for context in _safe_list(getattr(browser, "contexts", None) or []):
+            for p in _safe_list(getattr(context, "pages", None) or []):
+                _add(p)
+    for context in (
+        getattr(ctx, "browser_context", None),
+        getattr(ctx.page, "context", None) if ctx.page is not None else None,
+    ):
+        if context is None:
+            continue
+        for p in _safe_list(getattr(context, "pages", None) or []):
+            _add(p)
+    _add(ctx.page)
+    return out
+
+
 def _all_pages(ctx: ExecutionContext) -> list[Any]:
-    """当前页 + 浏览器里所有页，去重保序。"""
+    """当前页 + 浏览器里所有页，去重保序（当前页优先，适合"找页"）。"""
     out: list[Any] = []
     seen: set[int] = set()
 
@@ -887,7 +920,7 @@ async def web_tab(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     """args: {kind=index|title|url, index=0, title, url, match=contains|exact, save_as}"""
     kind = args.get("kind", "index")
     match = args.get("match", "contains")
-    pages = _all_pages(ctx)
+    pages = _stable_pages(ctx)  # 下标要稳：切完再列一次不能变
     if not pages:
         return Result.fail("没有可切换的标签页")
 

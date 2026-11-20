@@ -79,6 +79,16 @@ def _port_open(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
+def _port_of(cdp: str) -> int:
+    """从 `http://127.0.0.1:9333` 里取端口，取不到返回 0。"""
+    try:
+        from urllib.parse import urlparse
+
+        return urlparse(cdp).port or 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def _probe_cdp(port: int) -> str:
     """端口上有没有可用的浏览器 DevTools 端点。返回 cdp url 或空串。
 
@@ -219,12 +229,18 @@ async def _attach_shared_browser_locked(ctx: ExecutionContext) -> None:
     from playwright.async_api import async_playwright
 
     for cdp in candidates:
+        # 先花 0.05 秒确认端口活着。直接 connect_over_cdp 撞死端点是 15 秒超时，
+        # 冷启动时用户就干等 —— 上次记录里的端点多半已经过期了。
+        port = _port_of(cdp)
+        if port and not _port_open(port):
+            ctx.log("warn", f"CDP 端点已失效，跳过: {cdp}")
+            continue
         try:
             pw = await async_playwright().start()
             browser = await pw.chromium.connect_over_cdp(cdp, timeout=15_000)
             contexts = list(getattr(browser, "contexts", None) or [])
             context = contexts[0] if contexts else await browser.new_context()
-        except Exception as exc:  # noqa: BLE001 - 这个端点没开就连不上，试下一个
+        except Exception as exc:  # noqa: BLE001 - 这个端点连不上，试下一个
             ctx.log("warn", f"CDP 接管失败 {cdp}: {type(exc).__name__}: {exc}")
             continue
         setattr(ctx, "_ant_owned", True)
@@ -1021,12 +1037,11 @@ async def list_tabs() -> dict[str, Any]:
     if page is None:
         return {"ok": False, "error": "还没连接浏览器，先 web_open"}
     try:
-        # 必须和 web_tab 用同一个来源（nodes.web._all_pages），否则两边的 index
-        # 不是一回事：这里拿 context.pages，web_tab 拿 browser.contexts 全量，
-        # 多 context 时按 list_tabs 的序号去切会切到别的页。
-        from nodes.web import _all_pages
+        # 必须和 web_tab 用同一个来源与顺序（nodes.web._stable_pages），
+        # 否则两边的 index 不是一回事；且要用稳定顺序，切完再列不能变。
+        from nodes.web import _stable_pages
 
-        pages = _all_pages(_ctx)
+        pages = _stable_pages(_ctx)
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": f"取页面列表失败: {type(exc).__name__}: {exc}"}
 
@@ -1042,7 +1057,14 @@ async def list_tabs() -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             info["title"] = ""
         tabs.append(info)
-    return {"ok": True, "count": len(tabs), "cdp": getattr(_ctx, "cdp_url", "") or "", "tabs": tabs}
+    return {
+        "ok": True,
+        "count": len(tabs),
+        # 真实接管端点：让调用方能确认"连的是哪只浏览器"。
+        # 早先读 _ctx.cdp_url，那个属性没人赋过值，永远返回空串。
+        "cdp": _SHARED_BROWSER.get("cdp") or getattr(_ctx, "cdp_url", "") or "",
+        "tabs": tabs,
+    }
 
 
 _JS_DOM_INSPECT = r"""
