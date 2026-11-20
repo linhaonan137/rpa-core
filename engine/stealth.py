@@ -84,8 +84,19 @@ _MARK = "_stealth_applied"
 
 
 def launch_kwargs(headless: bool = True, *, channel: str | None = "chrome") -> dict[str, Any]:
-    """给 playwright 的 launch 用。优先系统 Chrome，失败由调用方降级。"""
-    kw: dict[str, Any] = {"headless": headless, "args": list(LAUNCH_ARGS)}
+    """给 playwright 的 launch 用。优先系统 Chrome，失败由调用方降级。
+
+    `RPA_LAUNCH_PORT` 设了就给自建浏览器开调试端口 —— 这样这只浏览器
+    下次能被 `_last_cdp` 找回并直接接管，登录态不用重登。
+    """
+    import os
+
+    args = list(LAUNCH_ARGS)
+    port = (os.getenv("RPA_LAUNCH_PORT") or "").strip()
+    if port.isdigit():
+        args.append(f"--remote-debugging-port={port}")
+        args.append("--remote-debugging-address=127.0.0.1")
+    kw: dict[str, Any] = {"headless": headless, "args": args}
     if channel:
         kw["channel"] = channel
     return kw

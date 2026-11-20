@@ -64,16 +64,19 @@ def create_app(
     # 这里在服务层维护一个长驻浏览器，所有请求复用同一个 context
     # （cookie / localStorage 都在这层，登录一次后续都带着）。
 
-    async def _attach_shared(ctx: ExecutionContext) -> Any:
+    async def _attach_shared(ctx: ExecutionContext, flow: Any = None) -> Any:
         """把共享浏览器挂到本次请求的 ctx 上，返回共享 context。
 
         真正的实现在 api/mcp.py（`_attach_shared_browser`）—— 那边 flow_run
         内部也要用同一份，不能在这里各起一套。
+        纯数据流程（无 web_* 节点）不挂浏览器，返回 None。
         """
-        from api.mcp import _SHARED_BROWSER, _attach_shared_browser
+        from api.mcp import _SHARED_BROWSER, _attach_shared_browser, _needs_browser
 
+        if flow is not None and not _needs_browser(flow):
+            return None
         await _attach_shared_browser(ctx)
-        return _SHARED_BROWSER["context"]
+        return _SHARED_BROWSER.get("context")
 
     # ---------------------------------------------------------- 鉴权
 
@@ -166,7 +169,7 @@ def create_app(
         from engine.browser_lock import BrowserBusy, browser_lock
 
         try:
-            context = await _attach_shared(ctx)
+            context = await _attach_shared(ctx, flow)
         except Exception as exc:  # noqa: BLE001
             # 浏览器接不上（Ant 没开 / CDP 端口变了）→ 503 + **落一条失败记录**。
             # 否则 /runs 里查不到这次失败，n8n 只看到裸 500，

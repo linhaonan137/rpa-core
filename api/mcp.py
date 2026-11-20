@@ -43,6 +43,82 @@ _SHARED_BROWSER: dict[str, Any] = {}
 #: 无锁 dict 还会让 A 读到 B 清空后的 KeyError -> HTTP 500。
 _BROWSER_LOCK = asyncio.Lock()
 
+#: 自动发现时扫的端口范围。9222 是 Chrome 惯例值，往后扫到 9400 覆盖常见自定义端口。
+_CDP_SCAN_PORTS = tuple(range(9222, 9401))
+
+
+def _listening_ports() -> set[int]:
+    """一次读系统监听表。比逐端口 socket 探测快两个数量级（6.9s → ~0.1s）。"""
+    import re as _re
+    import subprocess as _sp
+
+    try:
+        out = _sp.run(
+            ["netstat", "-ano", "-p", "tcp"],
+            capture_output=True, text=True, timeout=5,
+            encoding="utf-8", errors="replace",
+        ).stdout
+    except Exception:  # noqa: BLE001 - 拿不到就退回逐端口探测
+        return set()
+    ports: set[int] = set()
+    for line in out.splitlines():
+        if "LISTENING" not in line.upper():
+            continue
+        m = _re.search(r"[:.](\d{2,5})\s+\S*\s*LISTENING", line, _re.IGNORECASE)
+        if m:
+            ports.add(int(m.group(1)))
+    return ports
+
+
+def _port_open(port: int) -> bool:
+    """socket 探测（仅在拿不到监听表时兜底用）。"""
+    import socket as _socket
+
+    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+        s.settimeout(0.05)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _probe_cdp(port: int) -> str:
+    """端口上有没有可用的浏览器 DevTools 端点。返回 cdp url 或空串。
+
+    Electron 应用（含 WorkBuddy 自身）也开 CDP 端口，但那是宿主 UI，
+    接管过来会把流程点进别的软件里 —— 按 UA 排除。
+    """
+    import json as _json
+    import urllib.request as _req
+
+    opener = _req.build_opener(_req.ProxyHandler({}))  # 回环不走系统代理
+    try:
+        with opener.open(f"http://127.0.0.1:{port}/json/version", timeout=0.5) as r:
+            info = _json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:  # noqa: BLE001 - 端口没开 / 不是 DevTools
+        return ""
+    ua = str(info.get("User-Agent") or "")
+    if "Electron" in ua or "WorkBuddy" in ua:
+        return ""
+    if not info.get("webSocketDebuggerUrl"):
+        return ""
+    return f"http://127.0.0.1:{port}"
+
+
+def _discover_cdp() -> str:
+    """扫端口找一只开了调试端口的浏览器（用户手动开的那些）。
+
+    先拿系统监听表过滤，只对真正在监听的端口发 HTTP —— 179 个端口全探要 7 秒，
+    过滤后通常只剩 1~2 个候选。
+    """
+    listening = _listening_ports()
+    if listening:
+        candidates = [p for p in _CDP_SCAN_PORTS if p in listening]
+    else:  # 兜底：逐端口 socket 探测
+        candidates = [p for p in _CDP_SCAN_PORTS if _port_open(p)]
+    for port in candidates:
+        found = _probe_cdp(port)
+        if found:
+            return found
+    return ""
+
 
 def _last_cdp() -> str:
     """上次 attach 过的 CDP 端点：MCP 服务重启后也能找回同一只浏览器。"""
@@ -68,8 +144,20 @@ def _remember_cdp(cdp: str) -> None:
         pass
 
 
-async def _attach_shared_browser(ctx: ExecutionContext) -> None:
-    """挂共享浏览器（加锁：冷启动并发时只允许一个请求去 connect / launch）。"""
+def _needs_browser(flow: Any) -> bool:
+    """流程里有没有要操作网页的节点。纯数据/文件流程不该为此付浏览器代价。"""
+    nodes = getattr(flow, "nodes", None) or []
+    return any(str(getattr(n, "type", "")).startswith("web_") for n in nodes)
+
+
+async def _attach_shared_browser(ctx: ExecutionContext, flow: Any = None) -> None:
+    """挂共享浏览器（加锁：冷启动并发时只允许一个请求去 connect / launch）。
+
+    传了 flow 且里面没有 `web_*` 节点时直接跳过 —— 否则纯数据处理流程会被
+    「接管的浏览器不可达」挡住，而它根本不需要浏览器。
+    """
+    if flow is not None and not _needs_browser(flow):
+        return
     async with _BROWSER_LOCK:
         await _attach_shared_browser_locked(ctx)
 
@@ -120,8 +208,12 @@ async def _attach_shared_browser_locked(ctx: ExecutionContext) -> None:
             return
         _SHARED_BROWSER.clear()   # 缓存失效，往下走重新接管
 
-    # ③ CDP 接管：环境变量优先，其次上次 attach 记录的端点
+    # ③ CDP 接管：环境变量优先，其次上次记录的端点，最后自动扫端口
     cdp = (os.getenv("RPA_CDP") or "").strip() or _last_cdp()
+    if not cdp:
+        cdp = _discover_cdp()
+        if cdp:
+            ctx.log("info", f"自动发现浏览器: {cdp}")
     if cdp:
         from playwright.async_api import async_playwright
 
@@ -146,8 +238,15 @@ async def _attach_shared_browser_locked(ctx: ExecutionContext) -> None:
     # "登录态丢失"伪装成"元素超时"。确需自建时显式设 RPA_ALLOW_LAUNCH=1。
     if (os.getenv("RPA_ALLOW_LAUNCH") or "").strip() not in ("1", "true", "True"):
         raise RuntimeError(
-            "接管的浏览器不可达（RPA_CDP / out/_last_cdp.txt 都没连上），且未允许自建浏览器。"
-            "请确认 Ant 已启动、CDP 端口正确；确需自建请设 RPA_ALLOW_LAUNCH=1。"
+            "没有可接管的浏览器：RPA_CDP 未设、out/_last_cdp.txt 无记录，"
+            f"也扫不到 {_CDP_SCAN_PORTS[0]}~{_CDP_SCAN_PORTS[-1]} 之间开调试端口的浏览器。\n"
+            "你手动开的浏览器默认不带调试端口，程序连不进去。三种解法（选一个）：\n"
+            "  1) 用调试端口重启 Chrome（保留登录态需指定自己的 profile 目录）：\n"
+            '     chrome.exe --remote-debugging-port=9333 --user-data-dir="D:\\chrome-rpa"\n'
+            "     然后设 RPA_CDP=http://127.0.0.1:9333（或直接重启服务，程序会自动扫到）\n"
+            "  2) 设 RPA_CDP=<指纹浏览器给的 CDP 地址>\n"
+            "  3) 让程序自己开一只：设 RPA_ALLOW_LAUNCH=1"
+            "（无登录态；再设 RPA_LAUNCH_PORT=9333 可让下次直接接管同一只）"
         )
     from engine import stealth
     from nodes.web import _default_headless, _open_browser
@@ -160,6 +259,13 @@ async def _attach_shared_browser_locked(ctx: ExecutionContext) -> None:
     _SHARED_BROWSER.update(browser=browser, context=context, _pw=pw)
     ctx.browser = _SHARED_BROWSER["browser"]
     ctx.browser_context = _SHARED_BROWSER["context"]
+    # 自建时若指定了调试端口，记下来 —— 下次启动直接接管这只，登录态还在
+    port = (os.getenv("RPA_LAUNCH_PORT") or "").strip()
+    if port.isdigit():
+        endpoint = f"http://127.0.0.1:{port}"
+        _SHARED_BROWSER["cdp"] = endpoint
+        _remember_cdp(endpoint)
+        ctx.log("info", f"自建浏览器已开放调试端口 {endpoint}，下次会直接接管")
 
 
 # ---------------------------------------------------------------- 内部工具
@@ -1572,7 +1678,7 @@ async def flow_run(
     run_id = f"r-{int(time.time())}-{_uuid.uuid4().hex[:6]}"
     ctx = EC(run_id=run_id)
     # 复用进程级共享浏览器：不挂的话新 ctx 没 browser，web_open 会再 launch 一个
-    await _attach_shared_browser(ctx)
+    await _attach_shared_browser(ctx, f)
     for k, v in (vars or {}).items():
         ctx.set_var(k, v, scope="global")
     for var in f.vars:
