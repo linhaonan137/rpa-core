@@ -232,3 +232,29 @@ def test_concurrent_add_not_lost(tmp_path):
     b.save()
     final = ElementStore(p)
     assert final.has("ka") and final.has("kb")
+
+
+def test_expired_tombstone_is_gc(tmp_path):
+    """墓碑过期要清掉，否则每删一次留一条，文件无限变脏。"""
+    import json as _json
+    import time as _time
+
+    from elements.store import TOMBSTONE_TTL_DAYS
+
+    p = str(tmp_path / "el.json")
+    old_ts = _time.strftime(
+        "%Y-%m-%dT%H:%M:%S",
+        _time.localtime(_time.time() - (TOMBSTONE_TTL_DAYS + 5) * 86400),
+    )
+    fresh_ts = _time.strftime("%Y-%m-%dT%H:%M:%S")
+    with open(p, "w", encoding="utf-8") as f:
+        _json.dump({"version": 2, "elements": {},
+                    "deleted": {"old": old_ts, "recent": fresh_ts}}, f)
+
+    s = ElementStore(p)
+    s.add(_mk("keepme"))
+    s.save()
+
+    saved = _json.load(open(p, encoding="utf-8"))["deleted"]
+    assert "old" not in saved, "超过 TTL 的墓碑应被清掉"
+    assert "recent" in saved, "未过期的墓碑必须保留（还要挡旧副本复活）"

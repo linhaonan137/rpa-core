@@ -25,6 +25,9 @@ from engine.paths import ELEMENTS_PATH
 #: 反向索引用：某个元素被哪些流程/节点引用
 RefIndex = dict[str, set[str]]
 
+#: 墓碑保留天数。只用于挡住「旧副本写回复活」，过期即丢，避免文件无限变脏。
+TOMBSTONE_TTL_DAYS = 30
+
 
 class ElementError(Exception):
     pass
@@ -286,6 +289,16 @@ class ElementStore:
                 old = merged.get(key)
                 if old is None or _mtime(entry) >= _mtime(old):
                     merged[key] = entry
+
+            # ④ 墓碑 GC：超过 TOMBSTONE_TTL_DAYS 天就丢掉。
+            #  否则每次删除都留一条，永远不清，文件越用越脏。
+            #  为什么这个天数安全：墓碑是挡"旧副本写回复活"的，而副本的寿命
+            #  取决于进程存活时间；30 天后不可能还有进程握着那么老的快照。
+            cutoff = time.strftime(
+                "%Y-%m-%dT%H:%M:%S",
+                time.localtime(time.time() - TOMBSTONE_TTL_DAYS * 86400),
+            )
+            tomb = {k: v for k, v in tomb.items() if str(v) >= cutoff}
 
             self._deleted = tomb
             payload = {"version": 2, "elements": {k: v.to_dict() for k, v in merged.items()},
