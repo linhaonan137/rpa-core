@@ -169,6 +169,9 @@ async def test_attach_clears_dead_ref_and_uses_recorded_cdp(monkeypatch):
     monkeypatch.setattr(mcp_mod, "_SHARED_BROWSER", {})
     monkeypatch.setenv("RPA_CDP", "")
     monkeypatch.setattr(mcp_mod, "_last_cdp", lambda: "http://127.0.0.1:59493")
+    # 端口预检要放行：这里测的是"记录端点能用"，不是真实端口
+    monkeypatch.setattr(mcp_mod, "_port_open", lambda port: True)
+    monkeypatch.setattr(mcp_mod, "_discover_cdp", lambda: "")
 
     connected_browser = MagicMock()
     connected_browser.contexts = [MagicMock()]

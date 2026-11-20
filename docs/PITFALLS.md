@@ -99,6 +99,27 @@
 | K9 | `resolve` 把 `{return}` 当变量误伤 | 跑带花括号的 JS/Python 之前 |
 | D2 | 打包整目录 `flows` | 交付打包之前 |
 | D4 | 定时任务全量回写、`daily_at` 按分钟匹配会漏跑 | 用内置 `rpa schedule` 之前 |
+| B9 | 标签页下标随当前页漂移 | 按序号切标签之前 |
+| B10 | 接管端点失效要等满 15 秒超时 | 换浏览器 / 端口变了之后 |
+| D5 | 改完代码没重启，服务还在跑旧代码 | 让 Agent 验证功能之前 |
+
+**B9 怎么绕**：`_all_pages` 把 `ctx.page` 放第一位（适合"找页"），拿它当序号用会漂——
+切到第 2 个标签页再列一次，原来的 0 号变成了 1 号。序号统一走 `_stable_pages`
+（保持 `browser.contexts[*].pages` 原始顺序）。写流程优先按 URL/标题切，别用序号。
+
+**B10 怎么绕**：`_last_cdp.txt` 里的端点会过期（浏览器关了、Playwright 换随机端口）。
+直接 `connect_over_cdp` 撞死端点是 15 秒超时，冷启动就卡在那。接管前先做端口预检
+（`_port_open`，0.05 秒），实测从 15s+ 降到 0.53s。
+
+**D5 怎么绕**：MCP / HTTP 服务只在启动时 import 一次代码，改文件不生效。验证前先对时间：
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+  Where-Object { $_.CommandLine -match 'mcp' } |
+  Select-Object ProcessId, CreationDate
+```
+
+进程启动时间必须晚于最后改动的文件。否则你以为在测新逻辑，其实测的是上一版。
 
 **K9 怎么绕**：`_JS_TOKEN` 只匹配 `{单个标识符}`。左花括号后加空格（`{ return ... }`）或用冒号（`{ name: 1 }`）即可避开；`${count}` 会被误替换，写成 `\{count\}`。
 
