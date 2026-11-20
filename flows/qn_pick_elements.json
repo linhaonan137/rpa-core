@@ -17,8 +17,7 @@
         "until": "dom",
         "url": "https://myseller.taobao.com/home.htm/QnworkbenchHome/"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n2",
@@ -44,8 +43,7 @@
         "key": "qn_goods_menu",
         "target": "a:has-text('商品')"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n4",
@@ -61,8 +59,7 @@
         ],
         "target": "@el:qn_goods_menu"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n5",
@@ -75,8 +72,7 @@
         "key": "qn_publish_link",
         "target": "a:has-text('发布商品')"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n6",
@@ -88,8 +84,7 @@
       "args": {
         "code": "() => { const a = [...document.querySelectorAll('a')].find(e => (e.innerText||'').trim() === '发布商品'); if (!a) throw new Error('找不到发布商品链接'); a.click(); return a.href; }"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n7",
@@ -104,8 +99,7 @@
           2200
         ]
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n8",
@@ -123,8 +117,7 @@
         "match": "contains",
         "title": "商品发布"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n9",
@@ -141,8 +134,7 @@
         "limit_ms": 20000,
         "text": "{一级类目}"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n10",
@@ -158,8 +150,7 @@
           800
         ]
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n11",
@@ -176,8 +167,7 @@
         "limit_ms": 15000,
         "text": "{二级类目}"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n12",
@@ -193,8 +183,7 @@
           800
         ]
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n13",
@@ -211,8 +200,7 @@
         "limit_ms": 15000,
         "text": "正确填写品牌信息"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n14",
@@ -226,8 +214,7 @@
         "target": "input[placeholder='请选择']"
       },
       "label": "品牌下拉（类目页唯一，拾取）",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n15",
@@ -240,8 +227,7 @@
         "key": "qn_confirm_next",
         "target": "button:has-text('确认，下一步')"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n16",
@@ -258,8 +244,7 @@
         "target": "@el:qn_brand_select"
       },
       "label": "拾取后立刻用 @el: 引用",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n17",
@@ -277,8 +262,7 @@
         "limit_ms": 10000,
         "target": "div.options-item"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n18",
@@ -294,8 +278,7 @@
           800
         ]
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n19",
@@ -312,8 +295,7 @@
         "target": "@el:qn_confirm_next"
       },
       "label": "进填表页（@el: 引用）",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n20",
@@ -330,8 +312,7 @@
         "limit_ms": 25000,
         "text": "宝贝标题"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n21",
@@ -344,8 +325,7 @@
         "key": "qn_title_input",
         "target": "input[placeholder*='30个汉字']"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n22",
@@ -358,8 +338,7 @@
         "key": "qn_subtitle_input",
         "target": "input[placeholder*='15个汉字']"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n23",
@@ -372,8 +351,7 @@
         "key": "qn_color_input",
         "target": "input[placeholder*='主色']"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n24",
@@ -386,8 +364,7 @@
         "key": "qn_size_input",
         "target": "input[placeholder*='请选择尺码']"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n25",
@@ -400,8 +377,7 @@
         "key": "qn_price_input",
         "target": "input[placeholder='价格']"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n26",
@@ -414,8 +390,7 @@
         "key": "qn_save_draft",
         "target": "button:has-text('保存草稿')"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n27",
@@ -429,8 +404,7 @@
         "target": "div.image-empty"
       },
       "label": "主图上传位（页面有多个，取第 1 个）",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n28",
@@ -447,8 +421,7 @@
         "target": "@el:qn_title_input"
       },
       "label": "@el: 也可用于等待",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n29",
@@ -463,8 +436,7 @@
           1600
         ]
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     }
   ],
   "edges": [

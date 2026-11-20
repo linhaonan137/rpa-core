@@ -22,13 +22,11 @@ import nodes
 # 所以这里逐个写死，否则打包后 nodes 子模块全部丢失（实测：No module named 'nodes.web'）
 import nodes.ai  # noqa: F401
 import nodes.data  # noqa: F401
-import nodes.desktop  # noqa: F401
+import nodes.el_action  # noqa: F401
 import nodes.files  # noqa: F401
-import nodes.media  # noqa: F401
 import nodes.net  # noqa: F401
 import nodes.picker  # noqa: F401
 import nodes.system  # noqa: F401
-import nodes.trigger  # noqa: F401
 import nodes.web  # noqa: F401
 
 from engine.context import ExecutionContext

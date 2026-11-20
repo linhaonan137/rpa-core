@@ -459,9 +459,12 @@ async def test_save_as_writes_variable():
 
 
 async def test_undefined_variable_reports_fail():
-    r = await data.seq_order({"items": "{nope}"}, C())
-    assert not r.ok
-    assert "变量未定义" in r.error
+    """变量解析在调用方完成（Runner / api.mcp._call）；未定义必须报错，不能静默传原文。"""
+    ctx = C()
+    with pytest.raises(Exception, match="变量未定义"):
+        ctx.resolve({"items": "{nope}"})
+    r = await data.seq_order({"items": [1]}, ctx)
+    assert r.ok
 
 
 async def test_reserved_save_as_fails_softly():

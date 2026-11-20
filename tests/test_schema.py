@@ -107,9 +107,8 @@ def test_expect_empty_string_still_rejected():
 
 
 def test_node_metadata_alias():
-    n = Node(id="n1", type="click", **{"_note": "这是注释", "_heal": {"from": "#a"}})
+    n = Node(id="n1", type="click", **{"_note": "这是注释"})
     assert n.note == "这是注释"
-    assert n.heal == {"from": "#a"}
     dumped = n.model_dump(by_alias=True)
     assert dumped["_note"] == "这是注释"
 

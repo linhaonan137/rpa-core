@@ -18,8 +18,7 @@
         "url": "https://myseller.taobao.com/home.htm/QnworkbenchHome/"
       },
       "label": "打开工作台（到位后随机停）",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n2",
@@ -38,8 +37,7 @@
         "target": "a:has-text('商品')"
       },
       "label": "等商品菜单出现",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n3",
@@ -56,8 +54,7 @@
         "target": "a:has-text('商品')"
       },
       "label": "①点左侧商品（点完停一下）",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n4",
@@ -76,8 +73,7 @@
         "target": "a:has-text('发布商品')"
       },
       "label": "等子菜单展开",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n5",
@@ -90,8 +86,7 @@
         "code": "() => { const a = [...document.querySelectorAll('a')].find(e => (e.innerText||'').trim() === '发布商品'); if (!a) throw new Error('找不到发布商品链接'); a.click(); return a.href; }"
       },
       "label": "②点发布商品（浮层遮挡，JS 点）",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n6",
@@ -107,8 +102,7 @@
         ]
       },
       "label": "等新标签开出来",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n7",
@@ -127,8 +121,7 @@
         "title": "商品发布"
       },
       "label": "切到类目页（切完停）",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n8",
@@ -146,8 +139,7 @@
         "text": "{一级类目}"
       },
       "label": "等类目树渲染",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n9",
@@ -164,8 +156,7 @@
         ]
       },
       "label": "③选一级类目",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n10",
@@ -183,8 +174,7 @@
         "text": "{二级类目}"
       },
       "label": "等二级类目列表",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n11",
@@ -201,8 +191,7 @@
         ]
       },
       "label": "④选二级类目",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n12",
@@ -220,8 +209,7 @@
         "text": "正确填写品牌信息"
       },
       "label": "等品牌区块",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n13",
@@ -238,8 +226,7 @@
         "target": "input[placeholder='请选择']"
       },
       "label": "⑤展开品牌下拉",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n14",
@@ -258,8 +245,7 @@
         "target": "div.options-item"
       },
       "label": "等品牌列表",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n15",
@@ -276,8 +262,7 @@
         ]
       },
       "label": "⑤选品牌",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n16",
@@ -294,8 +279,7 @@
         "target": "button:has-text('确认，下一步')"
       },
       "label": "⑥确认下一步（进填表页，停得久一点）",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     }
   ],
   "edges": [

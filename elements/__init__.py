@@ -1,18 +1,5 @@
-"""元素库 —— 六维档案、打分器、拾取器。"""
+"""元素库 —— 六维档案、存储、拾取。"""
 
-from .matcher import (
-    MIN_GAP,
-    MIN_SCORE,
-    WEIGHTS,
-    Candidate,
-    Decision,
-    Scored,
-    decide,
-    explain,
-    match,
-    rank,
-    score,
-)
 from .store import (
     ElementEntry,
     ElementError,
@@ -33,15 +20,4 @@ __all__ = [
     "load_store",
     "make_entry",
     "scan_refs",
-    "Candidate",
-    "Decision",
-    "Scored",
-    "WEIGHTS",
-    "MIN_SCORE",
-    "MIN_GAP",
-    "score",
-    "rank",
-    "decide",
-    "match",
-    "explain",
 ]

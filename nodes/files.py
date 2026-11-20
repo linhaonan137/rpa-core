@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 from engine.context import ExecutionContext
-from engine.paths import PROJECT_ROOT
 from engine.registry import Result, registry
 
 _DEFAULT_CHUNK = 1024 * 1024
@@ -31,8 +30,9 @@ _DEFAULT_CHUNK = 1024 * 1024
 
 
 def node(type_: str, raw: tuple[str, ...] = ()):
-    """注册 + 参数解析 + 异常兜底（与 nodes.data 同一套约定）。
+    """注册 + 异常兜底（与 nodes.data 同一套约定）。
 
+    变量替换由调用方各做一次（Runner / api.mcp._call），这里不重复做。
     raw 里的字段不做变量替换（写入内容里的 `{...}` 属于正文）。
     """
 
@@ -42,15 +42,11 @@ def node(type_: str, raw: tuple[str, ...] = ()):
             if not isinstance(args, dict):
                 return Result.fail(f"{type_}: args 必须是对象")
             try:
-                a = {k: (v if k in raw else ctx.resolve(v)) for k, v in args.items()}
-            except Exception as exc:  # noqa: BLE001
-                return Result.fail(f"{type_}: 参数解析失败: {exc}")
-            try:
-                return await fn(a, ctx)
+                return await fn(args, ctx)
             except Exception as exc:  # noqa: BLE001
                 return Result.fail(f"{type_}: {type(exc).__name__}: {exc}")
 
-        registry.add(type_, wrapper, src=__name__)
+        registry.add(type_, wrapper, src=__name__, raw=raw)
         return wrapper
 
     return deco

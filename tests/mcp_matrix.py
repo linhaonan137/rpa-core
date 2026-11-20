@@ -275,14 +275,6 @@ def cases() -> list[dict]:
     A(C("web_switch", "①回主文档", {"kind": "main"}))
     A(C("list_tabs", "①列标签页", {}, detail=True))
 
-    # ---------------- 录制（会真录一次，最后删掉生成的流程）
-    A(C("record_start", "①开始", {}))
-    A(C("record_status", "①录制中", {}))
-    A(C("web_click", "⑥录一个点击", {"target": "li.next a"}))
-    A(C("record_status", "②应到 2 步", {}, note="接管页 + 点击"))
-    A(C("record_stop", "①停止并保存", {"flow": "_mx_rec", "title": "矩阵录制"}, detail=True))
-    A(C("flow_read", "③读录出来的流程", {"flow": "_mx_rec"}))
-    A(C("flow_delete", "③删掉录的流程", {"flow": "_mx_rec"}))
     A(C("web_read", "④元素不存在", {"target": "不存在_的元素", "kind": "text", "limit_ms": 3000}, expect="fail"))
     A(C("web_wait", "①等 body 可见", {"target": "body", "state": "visible"}))
     A(C("web_wait", "②固定等待 ms", {"ms": 500}, expect="fail",
@@ -332,10 +324,7 @@ def cases() -> list[dict]:
     A(C("web_capture", "整页截图(表单页)", {"kind": "shot", "full_page": True},
         artifact="@data", detail=True))
 
-    # ---------------- 桌面 / 媒体 / AI（预期缺库）
-    A(C("desktop_act", "①抓表格", {"kind": "table"}, expect="fail", detail=True))
-    A(C("desktop_act", "②读焦点控件", {"kind": "focused"}))
-    A(C("media_dl", "①下载视频", {"url": "https://example.com/v.mp4"}, expect="fail", detail=True))
+    # ---------------- AI（预期缺 key）
     A(C("ai_call", "①对话", {"prompt": "你好"}, expect="fail", detail=True))
 
     # ---------------- 数据 / 文件

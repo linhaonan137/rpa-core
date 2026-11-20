@@ -13,8 +13,7 @@
         "code": "from urllib.parse import quote\nprint('http://search.dangdang.com/?key=' + quote('{keyword}', encoding='gbk'))",
         "save_as": "search_url"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n2",
@@ -27,8 +26,7 @@
         "until": "dom",
         "url": "{search_url}"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n3",
@@ -57,8 +55,7 @@
         "item": "ul.bigimg > li",
         "save_as": "rows"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n4",
@@ -71,8 +68,7 @@
         "path": "out/dangdang_{keyword}.xlsx",
         "rows": "{rows}"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     }
   ],
   "edges": [

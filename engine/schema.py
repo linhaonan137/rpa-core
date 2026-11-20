@@ -6,7 +6,7 @@
   3. 变量键名 vars，不用 variables
   4. 出口名 exit，普通边为 None
 
-元数据约定：字段名以下划线开头的（_note / _heal / _meta）是注释性数据，
+元数据约定：字段名以下划线开头的（_note / _meta）是注释性数据，
 引擎在读取业务参数时一律跳过，不参与执行。
 """
 
@@ -86,11 +86,9 @@ class Node(BaseModel):
     off: bool = False  # 禁用：直接算成功跳过
     on_fail: OnFail | None = None
     expect: Expect | None = None
-    budget_ms: int = Field(default=0, ge=0)  # 0 = 用该类型默认值
 
     # 元数据（引擎不读，只做展示与审计）
     note: str | None = Field(default=None, alias="_note")
-    heal: dict[str, Any] | None = Field(default=None, alias="_heal")
     meta: dict[str, Any] | None = Field(default=None, alias="_meta")
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -103,7 +101,7 @@ class Node(BaseModel):
         loop 只有 loop/done 出口 —— 跳过后匹配不到任何边，**整条下游会被静默切断**，
         而流程仍报成功（实测：禁用 if → true 分支及其后续全不执行，ok=True）。
         """
-        if self.off and self.type in ("if", "loop", "while", "foreach"):
+        if self.off and self.type in ("if", "loop", "while", "foreach", "map_each"):
             raise ValueError(
                 f"{self.id}: off=true 不能用在分支/循环节点（{self.type}）"
                 "—— 它会被跳过并切断所有下游出口；请删除该节点或换用 if 条件控制"
@@ -186,7 +184,7 @@ class Flow(BaseModel):
 
 #: node() 里这些键算节点级字段，其余进 args
 _NODE_FIELDS = {
-    "on_fail", "expect", "off", "label", "budget_ms", "position", "note", "heal", "meta",
+    "on_fail", "expect", "off", "label", "position", "note", "meta",
 }
 
 

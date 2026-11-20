@@ -17,10 +17,6 @@ from engine.context import ExecutionContext
 from engine.paths import ELEMENTS_PATH
 from engine.registry import Result, register
 
-#: 默认元素库位置（由 engine.paths 决定，不依赖 cwd）
-DEFAULT_STORE = str(ELEMENTS_PATH)
-
-
 def _ambiguous(matched: int, key: str, desc: str) -> Result:
     """歧义拾取：拒绝落库，而不是静默取第 1 个。"""
     return Result.fail(

@@ -1,4 +1,4 @@
-"""元素库测试：存储、反向索引、打分器三道门。"""
+"""元素库测试：存储、反向索引、路径校验。"""
 
 from __future__ import annotations
 
@@ -6,16 +6,6 @@ import json
 
 import pytest
 
-from elements.matcher import (
-    Candidate,
-    decide,
-    match,
-    prefix_ratio,
-    rank,
-    score,
-    text_sim,
-    WEIGHTS,
-)
 from elements.store import (
     ElementEntry,
     ElementError,
@@ -170,118 +160,3 @@ def test_scan_refs_finds_element_refs():
 def test_scan_refs_nested():
     flows = [{"name": "f", "nodes": [{"id": "n", "args": {"a": {"b": ["@el:deep"]}}}]}]
     assert scan_refs(flows) == {"deep": {"f:n"}}
-
-
-# ------------------------------------------------------------ 打分基元
-
-
-@pytest.mark.parametrize("a,b,expect", [
-    ("提交", "提交", 1.0),
-    ("提交", "提交订单", 0.8),
-    ("", "x", 0.0),
-    (None, "x", 0.0),
-])
-def test_text_sim(a, b, expect):
-    assert text_sim(a, b) == expect
-
-
-def test_prefix_ratio():
-    assert prefix_ratio(["a", "b", "c"], ["a", "b", "d"]) == pytest.approx(2 / 3)
-    assert prefix_ratio([], ["a"]) == 0.0
-
-
-def test_weights_sum_to_one():
-    assert sum(WEIGHTS.values()) == pytest.approx(1.0)
-
-
-# ------------------------------------------------------------ 打分
-
-
-def test_exact_match_scores_high():
-    s = score(cand(), fp())
-    assert s.score > 0.95, f"完全一致应接近 1，实际 {s.score}"
-
-
-def test_class_only_change_still_high():
-    """只改 class 时分数仍然高（class 不在稳定属性里）。"""
-    s = score(cand(attrs={"id": "submit", "data-testid": "go", "class": "btn-new"}), fp())
-    assert s.score > 0.9
-
-
-def test_moved_position_still_reasonable():
-    """位置变了但语义/属性没变 → 仍然高分（几何只占 0.05）。"""
-    s = score(cand(geometry={"x": 900, "y": 900, "w": 80, "h": 30}), fp())
-    assert s.score > 0.85
-
-
-def test_totally_different_low():
-    s = score(
-        cand(role="link", name="首页", tag="a", attrs={"href": "/"},
-             path=["nav", "a"], siblings=[], geometry={"x": 0, "y": 0, "w": 10, "h": 10}),
-        fp(),
-    )
-    assert s.score < 0.3
-
-
-def test_parts_are_explainable():
-    s = score(cand(), fp())
-    assert set(s.parts) == set(WEIGHTS)
-    assert all(0 <= v <= 1 for v in s.parts.values())
-
-
-# ------------------------------------------------------------ 三道门
-
-
-def test_gate1_low_score_reports():
-    ranked = rank([cand(role="link", name="首页", tag="a", attrs={}, path=[], siblings=[], geometry={})], fp())
-    d = decide(ranked)
-    assert d.action == "report"
-    assert "低于阈值" in d.reason
-
-
-def test_gate2_ambiguous_reports():
-    """两个几乎一样的候选 → 判歧义。"""
-    c1 = cand(ref="r1")
-    c2 = cand(ref="r2")
-    d = decide(rank([c1, c2], fp()))
-    assert d.action == "report"
-    assert "歧义" in d.reason
-
-
-def test_gate2_clear_winner_commits():
-    c1 = cand(ref="r1")
-    c2 = cand(role="link", name="取消", tag="a", attrs={}, path=["x"], siblings=[],
-              geometry={"x": 0, "y": 0, "w": 1, "h": 1})
-    d = decide(rank([c1, c2], fp()))
-    assert d.action == "commit"
-
-
-def test_gate3_verify_failure_reports():
-    c1 = cand(ref="r1")
-    c2 = cand(role="link", name="取消", tag="a", attrs={}, path=["x"], siblings=[],
-              geometry={"x": 0, "y": 0, "w": 1, "h": 1})
-    d = match([c1, c2], fp(), verify=lambda c: False)
-    assert d.action == "report"
-    assert "试跑" in d.reason
-
-
-def test_gate3_verify_success_commits():
-    c1 = cand(ref="r1")
-    c2 = cand(role="link", name="取消", tag="a", attrs={}, path=["x"], siblings=[],
-              geometry={"x": 0, "y": 0, "w": 1, "h": 1})
-    d = match([c1, c2], fp(), verify=lambda c: c.ref == "r1")
-    assert d.action == "commit"
-
-
-def test_no_candidates_reports():
-    d = decide([])
-    assert d.action == "report"
-    assert "没有候选" in d.reason
-
-
-def test_role_and_name_passed_to_rank():
-    """rank 的 role/name 覆盖档案里的空值。"""
-    f = Fingerprint(tag="button", attrs={}, path=[], siblings=[], geometry=Geometry())
-    ranked = rank([cand()], f, role="button", name="提交订单")
-    assert ranked[0].parts["role"] > 0
-    assert ranked[0].parts["name"] > 0

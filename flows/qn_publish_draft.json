@@ -17,8 +17,7 @@
         "until": "dom",
         "url": "https://myseller.taobao.com/home.htm/QnworkbenchHome/"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n2",
@@ -36,8 +35,7 @@
         "limit_ms": 20000,
         "target": "@el:qn_goods_menu"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n3",
@@ -53,8 +51,7 @@
         ],
         "target": "@el:qn_goods_menu"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n4",
@@ -72,8 +69,7 @@
         "limit_ms": 15000,
         "target": "@el:qn_publish_link"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n5",
@@ -85,8 +81,7 @@
       "args": {
         "code": "() => { const a = [...document.querySelectorAll('a')].find(e => (e.innerText||'').trim() === '发布商品'); if (!a) throw new Error('找不到发布商品链接'); a.click(); return a.href; }"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n6",
@@ -101,8 +96,7 @@
           2200
         ]
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n7",
@@ -117,7 +111,6 @@
         "prefer": "latest"
       },
       "off": false,
-      "budget_ms": 0,
       "on_fail": {
         "mode": "retry",
         "attempts": 2,
@@ -140,8 +133,7 @@
         "limit_ms": 20000,
         "text": "{一级类目}"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n9",
@@ -157,8 +149,7 @@
           800
         ]
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n10",
@@ -175,8 +166,7 @@
         "limit_ms": 15000,
         "text": "{二级类目}"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n11",
@@ -192,8 +182,7 @@
           800
         ]
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n12",
@@ -210,8 +199,7 @@
         "limit_ms": 15000,
         "text": "正确填写品牌信息"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n13",
@@ -227,8 +215,7 @@
         ],
         "target": "@el:qn_brand_select"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n14",
@@ -246,8 +233,7 @@
         "limit_ms": 10000,
         "target": "div.options-item"
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n15",
@@ -263,8 +249,7 @@
           800
         ]
       },
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n16",
@@ -281,7 +266,6 @@
         "target": "@el:qn_confirm_next"
       },
       "off": false,
-      "budget_ms": 0,
       "expect": {
         "url": "publish.htm",
         "limit_ms": 10000
@@ -304,7 +288,6 @@
       },
       "label": "等填表页渲染",
       "off": false,
-      "budget_ms": 0,
       "on_fail": {
         "mode": "retry",
         "attempts": 2,
@@ -329,8 +312,7 @@
         "text": "{宝贝标题}"
       },
       "label": "宝贝标题（React 必须用真实键盘）",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n19",
@@ -350,8 +332,7 @@
         "text": "{导购标题}"
       },
       "label": "导购标题（10~15 汉字）",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "type": "web_click",

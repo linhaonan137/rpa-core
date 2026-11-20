@@ -1,6 +1,6 @@
 """MCP 服务：工具层，全是薄壳，内部转调节点与引擎。
 
-设计原则（见 docs/MCP-TOOLS.md）：
+设计原则（见 docs/ENGINE.md）：
   · 一个工具 = 一个意图，内部用 kind/action 分流到多个节点
   · 参数只暴露「语义必需」的，调优类（limit_ms/attempts）有默认值
   · 工具返回里带 suggestion（超时建议），供第 2 轮调优用
@@ -23,7 +23,7 @@ from fastmcp import FastMCP
 import nodes  # noqa: F401  触发节点注册
 from engine.context import ExecutionContext
 from engine.paths import DB_PATH, ELEMENTS_PATH, FLOWS_DIR, META_DIR_NAME, VERSIONS_DIR_NAME
-from engine.registry import Result, registry
+from engine.registry import Result, raw_fields, registry
 from engine.runner import RunOptions, Runner
 from engine.schema import Flow
 
@@ -216,23 +216,23 @@ def _safe_flow(name: str) -> tuple[str, dict[str, Any] | None]:
 async def _call(node_type: str, args: dict[str, Any]) -> dict[str, Any]:
     """调一个节点，统一成 MCP 可返回的 dict。
 
-    录制模式下：args 里的 `{{变量}}` 会先被换成实际值再执行，
-    但**记录的是原始模板** —— 这样录出来的流程是参数化的。
+    MCP 直调绕过了 Runner，所以变量替换在这里做一次（Runner 负责流程路径的那一次）。
+    raw 字段（模板/正则/正文）不替换，同 Runner。
     """
-    record_args = dict(args or {})
-    run_args = record_args
-    try:
-        from engine.recorder import recorder
-
-        if recorder.active and recorder.vars:
-            run_args = recorder.resolve(record_args)
-    except Exception:  # noqa: BLE001 - 录制器不可用就按原参数跑
-        run_args = record_args
-
     try:
         fn = registry.get(node_type)
     except KeyError as exc:
         return {"ok": False, "error": str(exc)}
+    raw = raw_fields(node_type)
+    try:
+        if raw:
+            run_args = {
+                k: (v if k in raw else _ctx.resolve(v)) for k, v in (args or {}).items()
+            }
+        else:
+            run_args = _ctx.resolve(dict(args or {}))
+    except Exception as exc:  # noqa: BLE001 - 变量缺失也算参数错误
+        return {"ok": False, "error": f"{node_type}: 参数解析失败: {exc}"}
     try:
         r: Result = await fn(run_args, _ctx)
     except Exception as exc:  # noqa: BLE001
@@ -242,15 +242,6 @@ async def _call(node_type: str, args: dict[str, Any]) -> dict[str, Any]:
         out["error"] = r.error
     if r.data is not None:
         out["data"] = _jsonable(r.data)
-    # 录制：只记**成功**的写操作（失败的不该进流程）
-    # 探索类节点（scan/discover/web_elem_info…）不在 RECORDABLE 里，自动跳过
-    if r.ok:
-        try:
-            from engine.recorder import recorder
-
-            recorder.add(node_type, record_args, r.message)
-        except Exception:  # noqa: BLE001 - 录制失败不影响主流程
-            pass
     if r.skipped:
         out["skipped"] = True
     return out
@@ -283,19 +274,6 @@ def _jsonable(v: Any) -> Any:
     if isinstance(v, (list, tuple)):
         return [_jsonable(x) for x in v]
     return str(v)
-
-
-def _suggest(node_type: str) -> dict[str, Any] | None:
-    """读执行趋势给超时建议（D07 的数据）。没有 db 时返回 None。"""
-    try:
-        from store.db import DB
-
-        db = DB(DB_PATH)
-        v = db.suggest_timeout(node_type)
-        db.close()
-        return {"timeout_ms": v} if v else None
-    except Exception:  # noqa: BLE001
-        return None
 
 
 # ---------------------------------------------------------------- 网页 7 个
@@ -1026,87 +1004,10 @@ async def dom_inspect(target: str, depth: int = 4) -> dict[str, Any]:
 
 
 @mcp.tool
-async def record_start(variables: dict | None = None) -> dict[str, Any]:
-    """**开始录制**：之后每个成功的操作（打开页/点击/输入/选择/等待）自动记成节点。
-
-    `variables` 声明参数：`{"title":"商品A"}`，之后操作里写 `{{title}}`，
-    执行时换成实际值，录进流程的是 `{title}` 模板 —— 生成的流程可反复跑不同数据。
-
-    只录写操作。scan / web_fields / element_verify 这类**探索工具不录**。
-    """
-    from engine.recorder import recorder
-
-    # 记下当前页面现场：attach 通常在 record_start 之前发生，
-    # 但生成的流程必须从"接管页面"起步，否则第一条操作就报"页面未打开"
-    ctx_node: dict[str, Any] | None = None
-    page = getattr(_ctx, "page", None)
-    if page is not None:
-        cdp = getattr(_ctx, "cdp_url", "") or ""
-        u = str(getattr(page, "url", "") or "")
-        host = ""
-        try:
-            from urllib.parse import urlparse
-
-            host = urlparse(u).netloc
-        except Exception:  # noqa: BLE001
-            host = ""
-        args: dict[str, Any] = {"kind": "url", "match": "contains", "limit_ms": 15000}
-        if host:
-            args["url"] = host
-        if cdp:
-            # 有 CDP：回放时接管同一个已登录浏览器
-            args["cdp"] = cdp
-            ctx_node = {"type": "web_attach", "args": args}
-        else:
-            # 没有 CDP（浏览器是引擎 launch 的）：回放时新 ctx 里没有任何页面，
-            # 用 web_attach 会报"没有已打开的页面可接管"，必须用 web_open 自己开
-            ctx_node = {
-                "type": "web_open",
-                "args": {"url": u or "about:blank", "kind": "new", "until": "dom"},
-            }
-    return recorder.start(variables, ctx_node)
-
-
-@mcp.tool
-async def record_stop(flow: str, title: str = "", save: bool = True) -> dict[str, Any]:
-    """停止录制并生成流程。flow 是文件名（只用字母数字下划线中划线）。
-
-    save=True 直接写到 flows/<flow>.json，返回 steps（录到几步）。
-    save=False 只把流程 JSON 回传，自己决定存哪。
-    """
-    from engine.recorder import recorder
-
-    name, err = _safe_flow(flow)
-    if err:
-        return err
-    target = FLOWS_DIR / f"{name}.json" if save else None
-    out = recorder.stop(save_to=target, name=name, title=title or name)
-    if save and not out.get("steps"):
-        out["error"] = "没有录到任何步骤（可能操作都失败了，或者都是探索类工具）"
-    return out
-
-
-@mcp.tool
-async def record_status() -> dict[str, Any]:
-    """看录制状态：是否在录、已经录了几步（最近 8 步的摘要）。"""
-    from engine.recorder import recorder
-
-    return {
-        "ok": True,
-        "recording": recorder.active,
-        "steps": len(recorder.entries),
-        "skipped": recorder.skipped,
-        "recent": [
-            {"type": e["type"], "msg": e.get("msg", "")} for e in recorder.entries[-8:]
-        ],
-    }
-
-
-@mcp.tool
 async def call_node(name: str, args: dict | None = None) -> dict[str, Any]:
     """直接调用任意引擎节点（实验 / 调试用）。
 
-    用途：写流程时需要一个**没封装成工具**的节点（122 个节点里 MCP 只包了 49 个）。
+    用途：写流程时需要一个**没封装成工具**的节点（111 个节点里 MCP 只包了 44 个）。
     先用 inspect_node 查它的参数名，再 call_node 直接试。
 
     args 就是节点的原生参数（和流程 JSON 里 args 字段一致）。
@@ -1165,9 +1066,6 @@ async def web_snapshot(limit: int = 200) -> dict[str, Any]:
 
     ✅ 用：读内容型页面，先理解整体结构再动手
     ❌ 别用：想知道能点什么→web_scan；看表单字段→web_fields
-
-    原来的 kind=structure 模式已删除：它返回的就是 web_scan + web_fields 的并集
-    （同一个 JS 扫两遍），同一件事给三个入口只会让选错。
     """
     return await _call("web_snapshot", {"kind": "text", "limit": min(int(limit or 200), 500)})
 
@@ -1262,7 +1160,6 @@ async def web_capture(
     name：文件名（不给就按秒自动命名 —— 同一秒两次会互相覆盖，建议给）
 
     ✅ 用：截图存档、下载页面上的普通文件/图片
-❌ 别用：下载视频/音频/m3u8→media_dl
     """
     kind, err = _merge_action(action, kind, allowed=("shot", "download", "image"), default="shot")
     if err:
@@ -1306,60 +1203,6 @@ async def web_network(
         "web_net",
         {"action": "wait", "pattern": pattern, "save_as": save_as, "limit_ms": limit_ms},
     )
-
-
-# ---------------------------------------------------------------- 桌面 / 下载
-
-
-@mcp.tool
-async def desktop_act(
-    kind: Literal["table", "select_text", "focused"] = "table",
-    control: str = "",
-    save_as: str = "",
-    limit: int = 1000,
-    action: str = "",
-) -> dict[str, Any]:
-    """
-桌面三件事：批量抓表格 / 抠控件里读不到的文字 / 读当前焦点控件。
-
-只做这三件。桌面自动化大部分场景用不上，页内操作用 `web_*` 更快更稳。
-    """
-    kind, err = _merge_action(action, kind, allowed=('table', 'select_text', 'focused'), default='table')
-    if err:
-        return err
-    if kind == "select_text":
-        return await _call("ui_text", {"control": control, "save_as": save_as})
-    if kind == "focused":
-        return await _call("ui_focus", {"save_as": save_as or "focused"})
-    # 节点 ui_table 读 target（不是 control），实测 control 被静默丢弃
-    return await _call("ui_table", {"target": control, "save_as": save_as, "limit": limit})
-
-
-@mcp.tool
-async def media_dl(
-    url: str,
-    kind: Literal["video", "audio", "playlist", "info", "m3u8"] = "video",
-    path: str = "",
-    quality: str = "best",
-) -> dict[str, Any]:
-    """下载：视频 / 音频 / 播放列表 / 只取元数据 / 加密流(m3u8)。
-
-    ✅ 用：媒体资源下载（尤其 m3u8 需要解密合并）
-❌ 别用：页面普通文件/图片/截图→web_capture
-    """
-    if path:
-        path, err = _safe_path(path)
-        if err:
-            return err
-    if kind == "audio":
-        return await _call("media_audio", {"url": url, "path": path})
-    if kind == "playlist":
-        return await _call("media_playlist", {"url": url, "path": path, "quality": quality})
-    if kind == "info":
-        return await _call("media_info", {"url": url})
-    if kind == "m3u8":
-        return await _call("media_m3u8", {"url": url, "path": path})
-    return await _call("media_get", {"url": url, "path": path, "quality": quality})
 
 
 # ---------------------------------------------------------------- 通用 4 个
@@ -2006,7 +1849,6 @@ async def flow_add_node(
         "args": dict(args or {}),
         "label": label or type,
         "off": False,
-        "budget_ms": 0,
     }
     if on_fail is not None:
         new_node["on_fail"] = on_fail
@@ -2136,7 +1978,7 @@ async def flow_rollback(flow: str, snapshot: str = "", dry_run: bool = False) ->
     d = p.parent / VERSIONS_DIR_NAME
     snaps = sorted(d.glob(f"{p.stem}.snap-*.json")) if d.exists() else []
     if not snaps:
-        return {"ok": False, "error": f"没有快照: {flow}", "hint": "只有改过流程（save/patch/add/drop/move）才会有"}
+        return {"ok": False, "error": f"没有快照: {flow}", "hint": "只有改过流程（save/patch/add/drop）才会有"}
     names = [s.name for s in snaps]
     if snapshot:
         f = d / snapshot

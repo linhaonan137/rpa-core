@@ -32,10 +32,10 @@ _MAX_OUT = 100_000
 
 
 def node(type_: str, raw: tuple[str, ...] = ()):
-    """注册 + 统一的参数解析与兜底。
+    """注册 + 统一的异常兜底。
 
-    包一层的目的：节点内部可以放心写 `int(args["size"])`，
-    任何异常都会变成 Result.fail，符合「不许抛异常穿透」的硬规则。
+    变量替换由调用方各做一次（Runner 走流程、api.mcp._call 走 MCP 直调），
+    这里只做类型校验和"异常不许穿透"。
 
     raw 里的字段**不做**变量替换 —— 模板、正则、正文这类内容里的
     `{...}` 是数据本身（如 `{姓名}`、`\\d{3}`），替换掉就毁了。
@@ -47,11 +47,7 @@ def node(type_: str, raw: tuple[str, ...] = ()):
             if not isinstance(args, dict):
                 return Result.fail(f"{type_}: args 必须是对象")
             try:
-                a = {k: (v if k in raw else ctx.resolve(v)) for k, v in args.items()}
-            except Exception as exc:  # noqa: BLE001 - 变量缺失也算参数错误
-                return Result.fail(f"{type_}: 参数解析失败: {exc}")
-            try:
-                return await fn(a, ctx)
+                return await fn(args, ctx)
             except Exception as exc:  # noqa: BLE001
                 return Result.fail(f"{type_}: {type(exc).__name__}: {exc}")
 

@@ -14,8 +14,7 @@
         "url": "https://quotes.toscrape.com/"
       },
       "label": "打开站点",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n2",
@@ -30,8 +29,7 @@
         "target": "div.quote"
       },
       "label": "抓 10 条摘句",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n3",
@@ -46,8 +44,7 @@
         "sheet": "摘句"
       },
       "label": "落表",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n4",
@@ -58,8 +55,7 @@
       },
       "args": {},
       "label": "关页面",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     }
   ],
   "edges": [

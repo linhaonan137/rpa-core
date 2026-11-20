@@ -39,6 +39,7 @@ desktop.ini
 rpa.db-journal
 flows/_meta/
 flows/.versions/
+flows/_schedule.json
 .env
 .env.*
 

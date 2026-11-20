@@ -265,16 +265,6 @@ async def page_point_to_screen(page: Any, box: dict[str, Any]) -> tuple[int, int
     )
 
 
-def foreground_hwnd() -> int:
-    """当前前台窗口句柄（用于确认点击不会打进别的窗口）。"""
-    if not _ready:
-        return 0
-    try:
-        return int(_user32.GetForegroundWindow())
-    except Exception:  # noqa: BLE001
-        return 0
-
-
 def find_window_by_title(substr: str) -> int:
     """按标题子串找可见顶层窗口（浏览器窗口）。找不到返回 0。"""
     if not _ready or not substr:

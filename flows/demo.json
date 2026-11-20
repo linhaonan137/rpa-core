@@ -19,8 +19,7 @@
         "mode": "skip",
         "attempts": 2,
         "backoff_ms": 1000
-      },
-      "budget_ms": 0
+      }
     },
     {
       "id": "n2",
@@ -34,8 +33,7 @@
         "count": 3
       },
       "label": "循环 3 轮",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n3",
@@ -49,8 +47,7 @@
         "value": "第 {_index} 条"
       },
       "label": "造一条数据",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n4",
@@ -61,8 +58,7 @@
       },
       "args": {},
       "label": "占位：真实场景这里是点击/抓取",
-      "off": false,
-      "budget_ms": 0
+      "off": false
     },
     {
       "id": "n5",
@@ -88,7 +84,6 @@
         "attempts": 2,
         "backoff_ms": 1000
       },
-      "budget_ms": 0,
       "_note": "缺 openpyxl 时跳过，不影响整条链跑通"
     }
   ],

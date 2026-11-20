@@ -75,9 +75,6 @@ class ExecutionContext:
         self.should_break = False
         self.should_continue = False
 
-        # 失败时的现场（供自愈读取）
-        self.last_error: dict[str, Any] | None = None
-
     # ------------------------------------------------------------ 作用域
 
     def push_scope(self) -> None:

@@ -125,22 +125,6 @@ C("N04", "notify", {"message": "hi", "channel": "feishu", "url": "https://httpbi
 C("N05", "notify", {"message": "hi"}, "fail", "缺 url")
 C("N06", "notify", {"message": "hi", "channel": "slack", "url": "https://httpbin.org/post"}, "fail", "非法 channel")
 
-# ================================================================ media_dl
-C("M01", "media_dl", {"url": "https://httpbin.org/image/png", "kind": "video"}, "fail", "非视频源")
-C("M02", "media_dl", {"url": "https://httpbin.org/image/png", "kind": "audio"}, "fail", "audio")
-C("M03", "media_dl", {"url": "https://httpbin.org/image/png", "kind": "info"}, "fail", "info")
-C("M04", "media_dl", {"url": "https://httpbin.org/image/png", "kind": "playlist"}, "fail", "playlist")
-C("M05", "media_dl", {"url": "https://httpbin.org/image/png", "kind": "m3u8"}, "fail", "m3u8")
-C("M06", "media_dl", {"url": "https://httpbin.org/image/png", "path": "C:/Windows/tmp"}, "fail", "绝对路径必须拒绝")
-C("M07", "media_dl", {"url": "https://httpbin.org/image/png", "path": "../tmpb", "quality": "1080"}, "fail", "越界必须拒绝")
-
-# ================================================================ desktop_act
-C("K01", "desktop_act", {"kind": "table", "control": "Notepad"}, "fail", "table 抓不到控件")
-C("K02", "desktop_act", {"kind": "select_text", "control": "Notepad"}, "fail", "select_text")
-C("K03", "desktop_act", {"kind": "focused"}, "any", "读焦点控件")
-C("K04", "desktop_act", {"kind": "table", "control": "Notepad", "save_as": "tmpb_tb", "limit": 5},
-  "fail", "limit + save_as 组合")
-
 # ================================================================ ai_call
 C("A01", "ai_call", {"task": "chat", "prompt": "你好"}, "fail", "chat 无 key")
 C("A02", "ai_call", {"task": "vision", "target": "out/tmpb_a.txt", "prompt": "看图"}, "fail", "vision 无 key")

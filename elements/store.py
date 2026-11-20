@@ -63,7 +63,6 @@ class ElementEntry:
     css: str | None = None  # 显式 css 兜底
     hints: dict[str, Any] = field(default_factory=dict)
     fingerprint: Fingerprint = field(default_factory=Fingerprint)
-    heal: dict[str, Any] | None = None  # 最近一次自愈痕迹
     meta: dict[str, Any] = field(default_factory=dict)  # created_at / source / hits / misses
 
     def __post_init__(self) -> None:
@@ -115,7 +114,6 @@ class ElementEntry:
             css=d.get("css"),
             hints=dict(d.get("hints") or {}),
             fingerprint=fp,
-            heal=d.get("heal"),
             meta=dict(d.get("meta") or {}),
         )
 
