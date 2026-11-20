@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import os
 import time
@@ -1680,6 +1681,7 @@ async def flow_patch(
     if not p.exists():
         return {"ok": False, "error": f"流程不存在: {flow}"}
     raw = json.loads(p.read_text(encoding="utf-8"))
+    pristine = copy.deepcopy(raw)   # 改前原样：快照必须存这个，不能存改完的
 
     target = next((n for n in raw.get("nodes", []) if n.get("id") == node), None)
     if target is None:
@@ -1714,7 +1716,7 @@ async def flow_patch(
     if dry_run:
         return {"ok": True, "dry_run": True, "diff": diff}
 
-    snap = _snapshot(p, raw)
+    snap = _snapshot(p, pristine)
     tmp = p.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(p)
@@ -2020,6 +2022,7 @@ async def flow_add_node(
     if not p.exists():
         return {"ok": False, "error": f"流程不存在: {flow}"}
     raw = json.loads(p.read_text(encoding="utf-8"))
+    pristine = copy.deepcopy(raw)   # 改前原样：快照必须存这个，不能存改完的
     if _has_branch_edges(raw):
         return {"ok": False, "error": "流程含分支/循环边（带 exit），结构编辑不支持",
                 "hint": "用 flow_save 整份重写，或先用 flow_read 看边定义"}
@@ -2078,7 +2081,7 @@ async def flow_add_node(
         return {"ok": True, "dry_run": True, "would_add": new_node, "edge_changes": changes,
                 "hint": "确认无误后 dry_run=False 落盘"}
 
-    snap = _snapshot(p, raw)
+    snap = _snapshot(p, pristine)
     tmp = p.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(p)
@@ -2105,6 +2108,7 @@ async def flow_drop_node(
     if not p.exists():
         return {"ok": False, "error": f"流程不存在: {flow}"}
     raw = json.loads(p.read_text(encoding="utf-8"))
+    pristine = copy.deepcopy(raw)   # 改前原样：快照必须存这个，不能存改完的
     if _has_branch_edges(raw):
         return {"ok": False, "error": "流程含分支/循环边，结构编辑不支持"}
 
@@ -2143,7 +2147,7 @@ async def flow_drop_node(
     if dry_run:
         return {"ok": True, "dry_run": True, "would_drop": node, "changes": changes}
 
-    snap = _snapshot(p, raw)
+    snap = _snapshot(p, pristine)
     tmp = p.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(p)
@@ -2216,10 +2220,11 @@ async def flow_delete(flow: str, purge_snapshots: bool = False) -> dict[str, Any
         return {"ok": False, "error": f"流程不存在: {flow}"}
 
     snap = ""
-    try:
-        snap = _snapshot(p, json.loads(p.read_text(encoding="utf-8")))
-    except Exception:  # noqa: BLE001 - 文件坏了也要能删掉
-        snap = ""
+    if not purge_snapshots:  # 要清干净就别先造一份再删掉，还承诺能找回
+        try:
+            snap = _snapshot(p, json.loads(p.read_text(encoding="utf-8")))
+        except Exception:  # noqa: BLE001 - 文件坏了也要能删掉
+            snap = ""
 
     p.unlink()
     removed = 0
@@ -2231,8 +2236,10 @@ async def flow_delete(flow: str, purge_snapshots: bool = False) -> dict[str, Any
                 removed += 1
             except Exception:  # noqa: BLE001
                 pass
+        return {"ok": True, "deleted": flow, "snapshot": "",
+                "purged_snapshots": removed, "hint": "已连同快照一起删除，无法找回"}
     return {"ok": True, "deleted": flow, "snapshot": snap,
-            "purged_snapshots": removed, "hint": "需要时可用 flow_rollback 找回"}
+            "purged_snapshots": 0, "hint": "需要时可用 flow_rollback 找回"}
 
 
 @mcp.tool

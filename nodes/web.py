@@ -2389,6 +2389,14 @@ async def web_dialog(args: dict[str, Any], ctx: ExecutionContext) -> Result:
         while not box and asyncio.get_running_loop().time() < deadline:
             await asyncio.sleep(0.05)
         if not box:
+            # 必须摘掉：`once` 只在**触发后**才自动移除，等不到就一直挂着。
+            # 挂着会连环出事 —— 下一次调 web_dialog 又挂一个，弹窗出现时两个处理器
+            # 抢着 accept，后来的那个报 "Cannot accept dialog which is already handled"；
+            # 更坏的情况是上一次的 dismiss 生效，把这次要接受的弹窗关掉。
+            try:
+                page.remove_listener("dialog", _on_dialog)
+            except Exception:  # noqa: BLE001 - 摘不掉也不该掩盖超时
+                pass
             return Result.fail(f"{wait_ms}ms 内没有出现弹窗")
 
     if box:
