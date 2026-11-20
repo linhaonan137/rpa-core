@@ -277,6 +277,21 @@ async def _attach_shared_browser_locked(ctx: ExecutionContext) -> None:
     _SHARED_BROWSER.update(browser=browser, context=context, _pw=pw)
     ctx.browser = _SHARED_BROWSER["browser"]
     ctx.browser_context = _SHARED_BROWSER["context"]
+
+
+async def _ensure_tool_browser() -> None:
+    """让工具会话（`_ctx`）用上真正的浏览器。
+
+    不挂的结果：`web_scan` / `web_click` 这类工具自己 launch 一只全新浏览器，
+    用户开着的那只（有登录态）完全用不上 —— 表现就是"我明明开了浏览器，
+    流程却让我重新登录"。这里先走共享接管，接不上再让 `_ensure_page` 自己拉。
+    """
+    if getattr(_ctx, "browser_context", None) is not None:
+        return
+    try:
+        await _attach_shared_browser(_ctx, None)
+    except Exception:  # noqa: BLE001 - 没浏览器就交给 _ensure_page 自己 launch
+        pass
     # 自建时若指定了调试端口，记下来 —— 下次启动直接接管这只，登录态还在
     port = (os.getenv("RPA_LAUNCH_PORT") or "").strip()
     if port.isdigit():
@@ -374,6 +389,9 @@ async def _call(node_type: str, args: dict[str, Any]) -> dict[str, Any]:
             run_args = _ctx.resolve(dict(args or {}))
     except Exception as exc:  # noqa: BLE001 - 变量缺失也算参数错误
         return {"ok": False, "error": f"{node_type}: 参数解析失败: {exc}"}
+    # 网页类节点：先把工具会话接到共享浏览器上，别自己另拉一只
+    if node_type.startswith("web_"):
+        await _ensure_tool_browser()
     try:
         r: Result = await fn(run_args, _ctx)
     except Exception as exc:  # noqa: BLE001
