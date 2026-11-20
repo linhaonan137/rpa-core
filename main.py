@@ -20,7 +20,6 @@ import nodes
 
 # PyInstaller 只认静态 import（它看不到 nodes.load_all() 里的 importlib.import_module），
 # 所以这里逐个写死，否则打包后 nodes 子模块全部丢失（实测：No module named 'nodes.web'）
-import nodes.ai  # noqa: F401
 import nodes.data  # noqa: F401
 import nodes.el_action  # noqa: F401
 import nodes.files  # noqa: F401

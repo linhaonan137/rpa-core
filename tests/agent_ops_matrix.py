@@ -125,16 +125,6 @@ C("N04", "notify", {"message": "hi", "channel": "feishu", "url": "https://httpbi
 C("N05", "notify", {"message": "hi"}, "fail", "缺 url")
 C("N06", "notify", {"message": "hi", "channel": "slack", "url": "https://httpbin.org/post"}, "fail", "非法 channel")
 
-# ================================================================ ai_call
-C("A01", "ai_call", {"task": "chat", "prompt": "你好"}, "fail", "chat 无 key")
-C("A02", "ai_call", {"task": "vision", "target": "out/tmpb_a.txt", "prompt": "看图"}, "fail", "vision 无 key")
-C("A03", "ai_call", {"task": "extract", "target": "标题：A 价格：9", "fields": ["标题", "价格"]}, "fail", "extract")
-C("A04", "ai_call", {"task": "normalize", "target": "2024/1/2"}, "fail", "normalize")
-C("A05", "ai_call", {"task": "classify", "target": "买了一个手机", "fields": ["数码", "食品"]}, "fail", "classify")
-C("A06", "ai_call", {"task": "find_selector", "prompt": "登录按钮"}, "fail", "find_selector")
-C("A07", "ai_call", {"task": "chat", "prompt": ""}, "fail", "空 prompt")
-C("A08", "ai_call", {"task": "bogus", "prompt": "x"}, "fail", "非法 task")
-
 # ================================================================ flow_read
 C("R01", "flow_read", {}, "ok", "列流程")
 C("R02", "flow_read", {"flow": "demo"}, "ok", "读 demo")

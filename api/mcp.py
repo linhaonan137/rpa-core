@@ -1522,44 +1522,6 @@ async def script_run(code: str = "", cmd: str = "", save_as: str = "", limit_ms:
 
 
 @mcp.tool
-async def ai_call(
-    task: Literal["chat", "vision", "extract", "normalize", "classify", "find_selector"] = "chat",
-    prompt: str = "",
-    target: str = "",
-    fields: list[str] | None = None,
-    save_as: str = "",
-    action: str = "",
-    api_key: str = "",
-    api_url: str = "",
-    model: str = "",
-) -> dict[str, Any]:
-    """调 LLM：对话 / 看图 / 按字段抽取 / 数据规整 / 分类 / 找选择器。
-
-    缺 key 时把 RPA_LLM_KEY 环境变量设上，或在这里传 api_key。
-    """
-    task, err = _merge_action(action, task, allowed=('chat', 'vision', 'extract', 'normalize', 'classify', 'find_selector'), default='chat')
-    if err:
-        return err
-    m = {
-        "chat": "llm_chat", "vision": "llm_vision", "extract": "llm_extract",
-        "normalize": "llm_normalize", "classify": "llm_classify",
-        "find_selector": "llm_selector",
-    }
-    args: dict[str, Any] = {"prompt": prompt, "save_as": save_as}
-    if api_key:
-        args["api_key"] = api_key
-    if api_url:
-        args["api_url"] = api_url
-    if model:
-        args["model"] = model
-    if target:
-        args["target"] = target
-    if fields:
-        args["fields"] = fields
-    return await _call(m[task], args)
-
-
-@mcp.tool
 async def notify(message: str, channel: Literal["webhook", "dingtalk", "wecom", "feishu"] = "webhook", url: str = "") -> dict[str, Any]:
     """发一条通知（一个 webhook POST 就够，不需要 17 个通道）。
 

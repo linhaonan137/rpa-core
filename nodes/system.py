@@ -224,7 +224,7 @@ async def sys_py(args: dict[str, Any], ctx: ExecutionContext) -> Result:
     """跑 Python 代码（逃生舱）：args: {code, save_as?}
 
     脚本里给 `result` 赋值即作为输出；直接 print 的内容也会被捕获。
-    可用的方式：print() 输出即结果；环境变量 RPA_LLM_KEY 等都在。
+    可用的方式：print() 输出即结果；环境变量（RPA_CDP / RPA_DB 等）都在。
     """
     import subprocess
     import sys as _sys

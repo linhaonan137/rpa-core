@@ -325,7 +325,6 @@ def cases() -> list[dict]:
         artifact="@data", detail=True))
 
     # ---------------- AI（预期缺 key）
-    A(C("ai_call", "①对话", {"prompt": "你好"}, expect="fail", detail=True))
 
     # ---------------- 数据 / 文件
     A(C("data_ops", "①excel_write(旧名)", {"kind": "excel_write", "path": "out/mx.xlsx",

@@ -26,7 +26,6 @@ MCP          工具层（见 docs/ENGINE.md）    <- AI Agent
 | `flow_*` | 流程管理：读写 / 存盘 / 改参 / 回滚 / 删除 / 执行 |
 | 控制流（无前缀）| `if` / `while` / `loop` / `foreach` / `map_each` / `break` / `continue` / `subflow` / `sleep` / `set_var` / `fail` / `stop` |
 | `data_*` | Excel 读写追加 / CSV / 正则 / 模板 / JSON |
-| `llm_*` | 对话 / 看图 / 字段抽取 / 归一化 / 分类 / 找选择器 |
 | `map_*` | 嵌套取值 / 展平 / 合并 / 过滤 / 排序 |
 | `sys_*` `net_*` | 系统命令 / Python 脚本 / HTTP 请求 |
 
